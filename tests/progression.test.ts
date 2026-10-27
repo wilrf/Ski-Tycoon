@@ -269,3 +269,23 @@ describe('ticket price forecast', () => {
     expect(forecast).toBeLessThan(day * 1.6);
   });
 });
+
+describe('tapping the map', () => {
+  it('picks the run at its ends and a skier in the middle', async () => {
+    const { createUiState, tapMap } = await import('../src/ui/tools');
+    const { pointAlong } = await import('../src/sim/geometry');
+    const world = builtWorld();
+    const resort = activeResort(world);
+    const run = resort.runs[0]!;
+    const middle = pointAlong(run.points, run.profile.length / 2);
+    const skier = makeSkier(vec(middle.x + 6, middle.y), 1, 999);
+    resort.skiers.push(skier);
+    const ui = createUiState();
+    tapMap(world, ui, run.points[0]!, 14);
+    expect(ui.selection).toEqual({ kind: 'run', id: run.id });
+    tapMap(world, ui, middle, 14);
+    expect(ui.selection).toEqual({ kind: 'skier', id: skier.id });
+    tapMap(world, ui, run.points[run.points.length - 1]!, 14);
+    expect(ui.selection?.kind).not.toBe('skier');
+  });
+});
