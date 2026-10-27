@@ -25,6 +25,16 @@ describe('skiing pose', () => {
     for (const o of offsets) expect(Math.abs(o)).toBeLessThan(11);
   });
 
+  it('lingers at the edge of each turn and darts through the fall line', () => {
+    const run = makeRun(plane(0.3), line);
+    // Sample a beginner's sideways offset evenly down the run, as time would.
+    const offsets = Array.from({ length: 400 }, (_, i) => Math.abs(skiingPose(skierOn(run, 0, 50 + i * 0.5), [run], 1)!.pos.x - 500));
+    const width = Math.max(...offsets);
+    const nearEdge = offsets.filter((o) => o > 0.7 * width).length / offsets.length;
+    // An even sine swing spends about half its time this close to the edge.
+    expect(nearEdge).toBeGreaterThan(0.58);
+  });
+
   it('flies over a jump the skier likes and skis around one they would skip', () => {
     const run: Run = { ...makeRun(plane(0.3), line), features: [{ type: 'largeJump', at: 300 }] };
     expect(skiingPose(skierOn(run, 3, 312), [run], 1)!.air).toBeGreaterThan(3);
