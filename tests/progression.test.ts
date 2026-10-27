@@ -305,3 +305,35 @@ describe('five skill levels', () => {
     expect(guest.skill).toBe(3);
   });
 });
+
+describe('lift parts', () => {
+  it('each level of each part changes the stat it promises, and waits for its stars', async () => {
+    const { liftSpeed, lineMood, partsFor, rideJoy, windHoldHeight, isCovered } = await import('../src/sim/lifts');
+    const world = builtWorld();
+    world.company.money = 1e9;
+    const lift = activeResort(world).lifts[0]!;
+    const stat = { drive: () => liftSpeed(lift), carriers: () => liftCapacity(lift), loading: () => -lineMood(lift), comfort: () => rideJoy(lift), wind: () => windHoldHeight(lift) };
+    expect(partsFor(lift.type)).toEqual(['drive', 'carriers', 'loading', 'comfort', 'wind']);
+    for (const part of partsFor(lift.type)) {
+      for (const level of CONFIG.liftParts[part].levels) {
+        world.company.stars = Math.max(0, level.stars - 1);
+        if (level.stars > 0) expect(applyCommand(world, { type: 'upgradeLiftPart', id: lift.id, part })).toMatchObject({ ok: false });
+        world.company.stars = level.stars;
+        const before = stat[part]();
+        expect(applyCommand(world, { type: 'upgradeLiftPart', id: lift.id, part })).toEqual({ ok: true });
+        expect(stat[part]()).toBeGreaterThan(before);
+      }
+      expect(applyCommand(world, { type: 'upgradeLiftPart', id: lift.id, part })).toMatchObject({ ok: false });
+    }
+    expect(isCovered(lift)).toBe(true);
+  });
+
+  it('keeps working on lifts from saves made before parts existed', async () => {
+    const { liftSpeed, partLevel } = await import('../src/sim/lifts');
+    const world = builtWorld();
+    const lift = activeResort(world).lifts[0]!;
+    delete lift.parts;
+    expect(partLevel(lift, 'drive')).toBe(0);
+    expect(liftSpeed(lift)).toBe(CONFIG.lifts.chairlift.speed);
+  });
+});

@@ -142,6 +142,8 @@ const menus = createMenus(choose, {
     else if (fix.kind === 'select') {
       selectTool(ui, { kind: 'select' });
       ui.selection = fix.selection;
+      // Lift complaints (lines, tiring tows) are fixed with upgrades, so open straight onto them.
+      if (fix.selection?.kind === 'lift') ui.liftTab = 'upgrades';
     } else if (fix.kind === 'tool') selectTool(ui, toolFor(fix.tool));
     else act(fix.action);
   },

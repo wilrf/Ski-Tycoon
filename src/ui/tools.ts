@@ -1,6 +1,6 @@
 import { CONFIG, type ApresPrice, type BuildingType, type FeatureType, type LiftType } from '../config';
 import { dist, distToPolyline, distToSegment, projectOnPolyline, type Vec2 } from '../sim/geometry';
-import type { LiftPlan } from '../sim/lifts';
+import type { LiftPart, LiftPlan } from '../sim/lifts';
 import { runAt } from '../sim/network';
 import { runPointProblem } from '../sim/runs';
 import { activeResort, applyCommand, planLiftHere, runEndAt, runProblemsHere, runStartAt, type Command, type World } from '../sim/world';
@@ -21,6 +21,8 @@ export interface UiState {
   tool: Tool;
   /** The tab the resort window last showed. */
   resortTab: ResortTab;
+  /** The tab the lift panel last showed. */
+  liftTab: 'info' | 'upgrades';
   selection: Selection;
   /** World point under the mouse, for live previews; null on touch screens. */
   hover: Vec2 | null;
@@ -30,9 +32,9 @@ export interface UiState {
 
 export type UiAction =
   | 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort'
-  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice' | `tab:${ResortTab}`;
+  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice' | `tab:${ResortTab}` | `liftTab:${'info' | 'upgrades'}` | `part:${LiftPart}`;
 
-export const createUiState = (): UiState => ({ tool: { kind: 'select' }, resortTab: 'overview', selection: null, hover: null, stroking: false });
+export const createUiState = (): UiState => ({ tool: { kind: 'select' }, resortTab: 'overview', liftTab: 'info', selection: null, hover: null, stroking: false });
 
 /** Drag-drawn runs keep a point about this often, in metres. */
 const STROKE_SPACING = 20;
@@ -224,6 +226,19 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
     case 'tab:land':
       ui.resortTab = action.slice('tab:'.length) as ResortTab;
       return null;
+    case 'liftTab:info':
+    case 'liftTab:upgrades':
+      ui.liftTab = action === 'liftTab:info' ? 'info' : 'upgrades';
+      return null;
+    case 'part:drive':
+    case 'part:carriers':
+    case 'part:loading':
+    case 'part:comfort':
+    case 'part:wind': {
+      if (selection?.kind !== 'lift') return null;
+      const part = action.slice('part:'.length) as LiftPart;
+      return apply({ type: 'upgradeLiftPart', id: selection.id, part }, `${CONFIG.liftParts[part].label} upgraded.`);
+    }
     case 'apresPrice': {
       // Cycles Low → Medium → High → Low.
       const tiers = Object.keys(CONFIG.apres.prices) as ApresPrice[];

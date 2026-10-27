@@ -1,7 +1,7 @@
 import { CONFIG, type ApresTier, type Skill } from '../config';
 import { buildingsNear, seatsOf, type Building } from './buildings';
 import { clamp, dist, lerp, pointAlong, type Vec2 } from './geometry';
-import { liftTier, rideSeconds, waitSeconds, type Lift } from './lifts';
+import { lineMood, liftTier, rideJoy, rideSeconds, waitSeconds, type Lift } from './lifts';
 import { branchesOf, leadsSomewhere, liftsFrom, mergeOf, runsFromLift, type Mountain } from './network';
 import { nextFloat, nextRange, pickWeighted, type Rng } from './rng';
 import { favouriteFeature, featureFun, funFor, rateRun, runLevel, type Run } from './runs';
@@ -305,7 +305,8 @@ function startRun(ctx: SkierContext, s: Skier, run: Run, scared: boolean, distan
 }
 
 function arriveAtTop(ctx: SkierContext, s: Skier, lift: Lift): void {
-  if (liftTier(lift).covered) feel(ctx.journal, ctx.time, s, 'comfyRide', 2, lift.name);
+  const joy = rideJoy(lift);
+  if (joy > 0) feel(ctx.journal, ctx.time, s, 'comfyRide', joy, lift.name);
   if (goEat(ctx, s)) return;
   pickRunFromTop(ctx, s, lift);
 }
@@ -430,7 +431,7 @@ export function updateSkier(ctx: SkierContext, s: Skier, dt: number): boolean {
         decide(ctx, s);
       }
     } else if (state.waited > cfg.queueTolerance) {
-      feel(ctx.journal, ctx.time, s, 'longLine', (-cfg.queueHappinessPerMinute * dt) / 60, lift.name);
+      feel(ctx.journal, ctx.time, s, 'longLine', (-cfg.queueHappinessPerMinute * lineMood(lift) * dt) / 60, lift.name);
       s.thought = { kind: 'longLine', lift: lift.name };
     }
   } else {
