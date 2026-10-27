@@ -27,8 +27,6 @@ export interface Frame {
   readonly alpha: number;
   /** Index into CONFIG.loop.speeds; fast speeds draw only a sample of skiers. */
   readonly speedIndex: number;
-  /** Share of the chosen speed the game runs at; below 1 when zoomed in for slow motion. */
-  readonly timeScale: number;
 }
 
 const TOWER_SPACING = 70;
@@ -265,8 +263,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 
   ctx.lineCap = ctx.lineJoin = 'round';
   // Riders are drawn in their seats by the lifts; everyone else is drawn below.
-  // In slow motion everyone moves slowly enough to watch, so nobody is thinned out.
-  const shown = drawnSkiers(world, f.timeScale < 0.5 ? 1 : f.speedIndex, ui.selection);
+  const shown = drawnSkiers(world, f.speedIndex, ui.selection);
   const carrierView: CarrierView = { at, zoom: camera.zoom, view, u: px(1.6, 1.8) };
   const riders = new Map<number, Rider[]>();
   for (const s of shown) {

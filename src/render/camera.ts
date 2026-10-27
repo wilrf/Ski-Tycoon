@@ -1,4 +1,3 @@
-import { CONFIG } from '../config';
 import { clamp, vec, type Vec2 } from '../sim/geometry';
 
 /** Centre of the view in world metres, and pixels per metre. */
@@ -51,20 +50,6 @@ export function zoomAt(c: Camera, v: View, at: Vec2, factor: number, extent: num
   c.x += before.x - after.x;
   c.y += before.y - after.y;
   clampCamera(c, extent, v);
-}
-
-/**
- * How much of the chosen game speed runs at this zoom: 1 when zoomed out, falling toward slow motion as
- * the player zooms in. The pace is eased on a log scale so each step of zoom slows time by a similar share.
- */
-export function timeScaleAt(zoom: number, speedIndex: number): number {
-  const { ticksPerSecond, gameSecondsPerTick, speeds, slowMotion } = CONFIG.loop;
-  const rate = ticksPerSecond * gameSecondsPerTick * speeds[speedIndex]!;
-  const t = clamp(Math.log(zoom / slowMotion.fromZoom) / Math.log(slowMotion.toZoom / slowMotion.fromZoom), 0, 1);
-  if (rate <= 0 || t === 0) return 1;
-  const base = ticksPerSecond * gameSecondsPerTick * speeds[1]!;
-  const cap = Math.exp(Math.log(base) + (Math.log(slowMotion.gameSecondsPerSecond) - Math.log(base)) * t);
-  return Math.min(1, cap / rate);
 }
 
 /**
