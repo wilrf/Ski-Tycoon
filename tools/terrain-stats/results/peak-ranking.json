@@ -10,6 +10,7 @@
     "title": "Mont Blanc",
     "lat": 45.83277778,
     "lon": 6.865,
+    "elevationM": 4805.6,
     "views": 536510
    },
    {
@@ -17,6 +18,7 @@
     "title": "Matterhorn",
     "lat": 45.97638889,
     "lon": 7.65861111,
+    "elevationM": 4477.5,
     "views": 479848
    },
    {
@@ -24,6 +26,7 @@
     "title": "Eiger",
     "lat": 46.5775,
     "lon": 8.00527778,
+    "elevationM": 3967.0,
     "views": 150182
    },
    {
@@ -31,6 +34,7 @@
     "title": "Zugspitze",
     "lat": 47.42111111,
     "lon": 10.98527778,
+    "elevationM": 2962.1,
     "views": 122384
    },
    {
@@ -38,6 +42,7 @@
     "title": "Aiguille du Midi",
     "lat": 45.87861111,
     "lon": 6.88722222,
+    "elevationM": 3842.0,
     "views": 114776
    },
    {
@@ -45,6 +50,7 @@
     "title": "Grossglockner",
     "lat": 47.07486667,
     "lon": 12.69525,
+    "elevationM": 3798.0,
     "views": 77353
    },
    {
@@ -52,6 +58,7 @@
     "title": "Jungfrau",
     "lat": 46.53680556,
     "lon": 7.96263889,
+    "elevationM": 4158.0,
     "views": 64458
    },
    {
@@ -59,6 +66,7 @@
     "title": "Monte Rosa",
     "lat": 45.93694444,
     "lon": 7.86666667,
+    "elevationM": 4634.0,
     "views": 60371
    },
    {
@@ -66,6 +74,7 @@
     "title": "Weisshorn",
     "lat": 46.10166667,
     "lon": 7.71611111,
+    "elevationM": 4505.0,
     "views": 20789
    },
    {
@@ -73,6 +82,7 @@
     "title": "Piz Bernina",
     "lat": 46.38222222,
     "lon": 9.90805556,
+    "elevationM": 4048.0,
     "views": 19145
    },
    {
@@ -80,6 +90,7 @@
     "title": "Grandes Jorasses",
     "lat": 45.86888889,
     "lon": 6.98805556,
+    "elevationM": 4208.0,
     "views": 18262
    },
    {
@@ -87,6 +98,7 @@
     "title": "Mönch",
     "lat": 46.55833333,
     "lon": 7.99722222,
+    "elevationM": 4110.0,
     "views": 13502
    },
    {
@@ -94,6 +106,7 @@
     "title": "Dent Blanche",
     "lat": 46.03416667,
     "lon": 7.61194444,
+    "elevationM": 4357.0,
     "views": 6289
    }
   ],
@@ -103,6 +116,7 @@
     "title": "Pikes Peak",
     "lat": 38.8405,
     "lon": -105.0442,
+    "elevationM": 4302.0,
     "views": 212983
    },
    {
@@ -110,6 +124,7 @@
     "title": "Mount Elbert",
     "lat": 39.11777778,
     "lon": -106.44527778,
+    "elevationM": 4401.0,
     "views": 133346
    },
    {
@@ -117,6 +132,7 @@
     "title": "Mount Blue Sky",
     "lat": 39.5883,
     "lon": -105.6438,
+    "elevationM": 4348.0,
     "views": 46102
    },
    {
@@ -124,6 +140,7 @@
     "title": "Longs Peak",
     "lat": 40.2550135,
     "lon": -105.6151153,
+    "elevationM": 4345.0,
     "views": 40068
    },
    {
@@ -131,6 +148,7 @@
     "title": "Maroon Bells",
     "lat": 39.0708492,
     "lon": -106.9889921,
+    "elevationM": 4315.0,
     "views": 37765
    },
    {
@@ -138,6 +156,7 @@
     "title": "Mount Massive",
     "lat": 39.1874645,
     "lon": -106.4756995,
+    "elevationM": 4395.4,
     "views": 19588
    },
    {
@@ -145,6 +164,7 @@
     "title": "Mount Sneffels",
     "lat": 38.0038357,
     "lon": -107.7923478,
+    "elevationM": 4312.0,
     "views": 15751
    },
    {
@@ -152,6 +172,7 @@
     "title": "Capitol Peak (Colorado)",
     "lat": 39.1502596,
     "lon": -107.0829396,
+    "elevationM": 4307.0,
     "views": 12148
    },
    {
@@ -159,6 +180,7 @@
     "title": "Crestone Peak",
     "lat": 37.9666665,
     "lon": -105.5852865,
+    "elevationM": 4357.0,
     "views": 6356
    }
   ],
@@ -168,6 +190,7 @@
     "title": "Aconcagua",
     "lat": -32.65305556,
     "lon": -70.01166667,
+    "elevationM": 6962.0,
     "views": 427063
    },
    {
@@ -175,6 +198,7 @@
     "title": "Tupungato",
     "lat": -33.35833333,
     "lon": -69.77,
+    "elevationM": 6570.0,
     "views": 9615
    },
    {
@@ -182,6 +206,7 @@
     "title": "Cerro El Plomo",
     "lat": -33.23277778,
     "lon": -70.21222222,
+    "elevationM": 5424.0,
     "views": 6704
    },
    {
@@ -189,6 +214,7 @@
     "title": "San José (volcano)",
     "lat": -33.78641667,
     "lon": -69.89866667,
+    "elevationM": 5856.0,
     "views": 4115
    },
    {
@@ -196,6 +222,7 @@
     "title": "Cerro Bonete",
     "lat": -28.0186,
     "lon": -68.7561,
+    "elevationM": 6759.0,
     "views": 2900
    },
    {
@@ -203,6 +230,7 @@
     "title": "Marmolejo",
     "lat": -33.734,
     "lon": -69.878,
+    "elevationM": 6108.0,
     "views": 2308
    },
    {
@@ -210,6 +238,7 @@
     "title": "Nevado Juncal",
     "lat": -33.0529,
     "lon": -70.102,
+    "elevationM": 5953.0,
     "views": 1081
    }
   ],
@@ -219,6 +248,7 @@
     "title": "Mount Everest",
     "lat": 27.98833333,
     "lon": 86.92527778,
+    "elevationM": 8848.9,
     "views": 2160712
    },
    {
@@ -226,6 +256,7 @@
     "title": "Kangchenjunga",
     "lat": 27.7025,
     "lon": 88.14666667,
+    "elevationM": 8586.0,
     "views": 356562
    },
    {
@@ -233,6 +264,7 @@
     "title": "Annapurna",
     "lat": 28.59611111,
     "lon": 83.82027778,
+    "elevationM": 8091.0,
     "views": 321046
    },
    {
@@ -240,6 +272,7 @@
     "title": "Nanga Parbat",
     "lat": 35.2375,
     "lon": 74.58916667,
+    "elevationM": 8126.0,
     "views": 300800
    },
    {
@@ -247,6 +280,7 @@
     "title": "Lhotse",
     "lat": 27.9617,
     "lon": 86.9333,
+    "elevationM": 8516.0,
     "views": 177986
    },
    {
@@ -254,6 +288,7 @@
     "title": "Ama Dablam",
     "lat": 27.86111111,
     "lon": 86.86111111,
+    "elevationM": 6814.0,
     "views": 114549
    },
    {
@@ -261,6 +296,7 @@
     "title": "Nanda Devi",
     "lat": 30.37583333,
     "lon": 79.97083333,
+    "elevationM": 7816.0,
     "views": 113355
    },
    {
@@ -268,6 +304,7 @@
     "title": "Cho Oyu",
     "lat": 28.09416667,
     "lon": 86.66083333,
+    "elevationM": 8188.0,
     "views": 111464
    },
    {
@@ -275,6 +312,7 @@
     "title": "Dhaulagiri",
     "lat": 28.69611111,
     "lon": 83.49527778,
+    "elevationM": 8167.0,
     "views": 108787
    },
    {
@@ -282,6 +320,7 @@
     "title": "Makalu",
     "lat": 27.88972222,
     "lon": 87.08888889,
+    "elevationM": 8485.0,
     "views": 95659
    },
    {
@@ -289,6 +328,7 @@
     "title": "Manaslu",
     "lat": 28.54944444,
     "lon": 84.56194444,
+    "elevationM": 8163.0,
     "views": 94449
    },
    {
@@ -296,6 +336,7 @@
     "title": "Machapuchare",
     "lat": 28.495,
     "lon": 83.94916667,
+    "elevationM": 6993.0,
     "views": 90745
    }
   ],
@@ -305,6 +346,7 @@
     "title": "Mount St. Helens",
     "lat": 46.1912,
     "lon": -122.1944,
+    "elevationM": 2549.0,
     "views": 784404
    },
    {
@@ -312,6 +354,7 @@
     "title": "Mount Rainier",
     "lat": 46.8517,
     "lon": -121.7603,
+    "elevationM": 4389.0,
     "views": 563800
    },
    {
@@ -319,6 +362,7 @@
     "title": "Mount Shasta",
     "lat": 41.40919603,
     "lon": -122.19488836,
+    "elevationM": 4322.0,
     "views": 229463
    },
    {
@@ -326,6 +370,7 @@
     "title": "Mount Hood",
     "lat": 45.37361111,
     "lon": -121.69583333,
+    "elevationM": 3425.0,
     "views": 197747
    },
    {
@@ -333,6 +378,7 @@
     "title": "Mount Baker",
     "lat": 48.7766298,
     "lon": -121.8144732,
+    "elevationM": 3286.0,
     "views": 109559
    },
    {
@@ -340,6 +386,7 @@
     "title": "Mount Adams (Washington)",
     "lat": 46.20241179,
     "lon": -121.49089469,
+    "elevationM": 3743.4,
     "views": 60079
    },
    {
@@ -347,6 +394,7 @@
     "title": "Glacier Peak",
     "lat": 48.11194444,
     "lon": -121.11416667,
+    "elevationM": 3213.0,
     "views": 27857
    },
    {
@@ -354,6 +402,7 @@
     "title": "Mount Jefferson (Oregon)",
     "lat": 44.6743006,
     "lon": -121.79957361,
+    "elevationM": 3199.0,
     "views": 20812
    },
    {
@@ -361,6 +410,7 @@
     "title": "Mount Shuksan",
     "lat": 48.8315495,
     "lon": -121.60316989,
+    "elevationM": 2782.0,
     "views": 17881
    }
   ],
@@ -370,6 +420,7 @@
     "title": "Mount Waddington",
     "lat": 51.37361111,
     "lon": -125.26333333,
+    "elevationM": 4019.0,
     "views": 35291
    },
    {
@@ -377,6 +428,7 @@
     "title": "Stawamus Chief",
     "lat": 49.68388889,
     "lon": -123.14166667,
+    "elevationM": 702.0,
     "views": 22220
    },
    {
@@ -384,6 +436,7 @@
     "title": "Mount Garibaldi",
     "lat": 49.85027778,
     "lon": -123.00472222,
+    "elevationM": 2678.0,
     "views": 21801
    },
    {
@@ -391,6 +444,7 @@
     "title": "Whistler Mountain",
     "lat": 50.05916667,
     "lon": -122.95694444,
+    "elevationM": 2181.0,
     "views": 17738
    },
    {
@@ -398,6 +452,7 @@
     "title": "The Black Tusk",
     "lat": 49.97527778,
     "lon": -123.04277778,
+    "elevationM": 2319.0,
     "views": 13948
    },
    {
@@ -405,6 +460,7 @@
     "title": "Blackcomb Peak",
     "lat": 50.08138889,
     "lon": -122.87083333,
+    "elevationM": 2436.0,
     "views": 4170
    },
    {
@@ -412,6 +468,7 @@
     "title": "Wedge Mountain",
     "lat": 50.13305556,
     "lon": -122.79333333,
+    "elevationM": 2895.0,
     "views": 3106
    }
   ],
@@ -421,6 +478,7 @@
     "title": "Mount Whitney",
     "lat": 36.57858093,
     "lon": -118.29199495,
+    "elevationM": 4421.0,
     "views": 574051
    },
    {
@@ -428,6 +486,7 @@
     "title": "El Capitan",
     "lat": 37.74222222,
     "lon": -119.63583333,
+    "elevationM": 2307.0,
     "views": 515000
    },
    {
@@ -435,6 +494,7 @@
     "title": "Half Dome",
     "lat": 37.7460363,
     "lon": -119.5329397,
+    "elevationM": 2693.0,
     "views": 151650
    },
    {
@@ -442,6 +502,7 @@
     "title": "Mammoth Mountain",
     "lat": 37.63062649,
     "lon": -119.03262563,
+    "elevationM": 3371.0,
     "views": 48287
    },
    {
@@ -449,6 +510,7 @@
     "title": "Mount Williamson",
     "lat": 36.6560456,
     "lon": -118.3112048,
+    "elevationM": 4390.0,
     "views": 13503
    },
    {
@@ -456,6 +518,7 @@
     "title": "Mount Lyell (California)",
     "lat": 37.73942437,
     "lon": -119.27156889,
+    "elevationM": 3997.0,
     "views": 7956
    },
    {
@@ -463,6 +526,7 @@
     "title": "Mount Tallac",
     "lat": 38.90597222,
     "lon": -120.09897222,
+    "elevationM": 2968.4,
     "views": 7576
    },
    {
@@ -470,6 +534,7 @@
     "title": "Clouds Rest",
     "lat": 37.76785389,
     "lon": -119.48922693,
+    "elevationM": 3025.0,
     "views": 7091
    },
    {
@@ -477,6 +542,7 @@
     "title": "Cathedral Peak (California)",
     "lat": 37.8478289,
     "lon": -119.4056214,
+    "elevationM": 3326.0,
     "views": 5099
    },
    {
@@ -484,6 +550,7 @@
     "title": "Mount Ritter",
     "lat": 37.689378,
     "lon": -119.1990298,
+    "elevationM": 4010.0,
     "views": 4577
    }
   ],
@@ -493,6 +560,7 @@
     "title": "Mount Washington",
     "lat": 44.2705,
     "lon": -71.30325,
+    "elevationM": 1917.0,
     "views": 248136
    },
    {
@@ -500,6 +568,7 @@
     "title": "Mount Mitchell",
     "lat": 35.764839,
     "lon": -82.2651221,
+    "elevationM": 2037.0,
     "views": 151977
    },
    {
@@ -507,6 +576,7 @@
     "title": "Kuwohi",
     "lat": 35.56277778,
     "lon": -83.49861111,
+    "elevationM": 2025.0,
     "views": 95988
    },
    {
@@ -514,6 +584,7 @@
     "title": "Katahdin",
     "lat": 45.90435447,
     "lon": -68.92127431,
+    "elevationM": 1606.0,
     "views": 45203
    },
    {
@@ -521,6 +592,7 @@
     "title": "Mount Mansfield",
     "lat": 44.54394691,
     "lon": -72.81430972,
+    "elevationM": 1339.7,
     "views": 40751
    },
    {
@@ -528,6 +600,7 @@
     "title": "Mount Le Conte (Tennessee)",
     "lat": 35.65416667,
     "lon": -83.43666667,
+    "elevationM": 2009.5,
     "views": 35673
    },
    {
@@ -535,6 +608,7 @@
     "title": "Grandfather Mountain",
     "lat": 36.11111111,
     "lon": -81.81138889,
+    "elevationM": 1818.0,
     "views": 28521
    },
    {
@@ -542,6 +616,7 @@
     "title": "Mount Rogers",
     "lat": 36.6598406,
     "lon": -81.5445575,
+    "elevationM": 1825.0,
     "views": 24442
    },
    {
@@ -549,6 +624,7 @@
     "title": "Spruce Mountain (West Virginia)",
     "lat": 38.75,
     "lon": -79.48333333,
+    "elevationM": 1482.2,
     "views": 21455
    }
   ],
@@ -558,6 +634,7 @@
     "title": "Mount Tate",
     "lat": 36.57583333,
     "lon": 137.61972222,
+    "elevationM": 3015.0,
     "views": 33534
    },
    {
@@ -565,6 +642,7 @@
     "title": "Mount Tsurugi (Toyama)",
     "lat": 36.62333333,
     "lon": 137.61722222,
+    "elevationM": 2938.0,
     "views": 27080
    },
    {
@@ -572,6 +650,7 @@
     "title": "Mount Kita",
     "lat": 35.67416667,
     "lon": 138.23666667,
+    "elevationM": 3193.0,
     "views": 17119
    },
    {
@@ -579,6 +658,7 @@
     "title": "Mount Ontake",
     "lat": 35.89305556,
     "lon": 137.48055556,
+    "elevationM": 3067.0,
     "views": 16483
    },
    {
@@ -586,6 +666,7 @@
     "title": "Mount Hotakadake",
     "lat": 36.28916667,
     "lon": 137.64805556,
+    "elevationM": 3190.0,
     "views": 8040
    },
    {
@@ -593,6 +674,7 @@
     "title": "Mount Yari",
     "lat": 36.34194444,
     "lon": 137.6475,
+    "elevationM": 3180.0,
     "views": 7859
    },
    {
@@ -600,6 +682,7 @@
     "title": "Mount Norikura",
     "lat": 36.10638889,
     "lon": 137.55361111,
+    "elevationM": 3026.0,
     "views": 4600
    },
    {
@@ -607,6 +690,7 @@
     "title": "Mount Shirouma",
     "lat": 36.75861111,
     "lon": 137.75861111,
+    "elevationM": 2932.0,
     "views": 3542
    },
    {
@@ -614,6 +698,7 @@
     "title": "Mount Kashimayari",
     "lat": 36.62444444,
     "lon": 137.74694444,
+    "elevationM": 2889.1,
     "views": 891
    }
   ],
@@ -623,6 +708,7 @@
     "title": "Mount Yōtei",
     "lat": 42.82666667,
     "lon": 140.81138889,
+    "elevationM": 1898.0,
     "views": 165860
    },
    {
@@ -630,6 +716,7 @@
     "title": "Asahi-dake",
     "lat": 43.65,
     "lon": 142.85,
+    "elevationM": 2291.0,
     "views": 18260
    },
    {
@@ -637,6 +724,7 @@
     "title": "Mount Tokachi (Daisetsuzan)",
     "lat": 43.41666667,
     "lon": 142.68333333,
+    "elevationM": 2077.0,
     "views": 7895
    },
    {
@@ -644,6 +732,7 @@
     "title": "Mount Rishiri",
     "lat": 45.18,
     "lon": 141.23916667,
+    "elevationM": 1721.0,
     "views": 5634
    },
    {
@@ -651,6 +740,7 @@
     "title": "Mount Meakan",
     "lat": 43.38638889,
     "lon": 144.00888889,
+    "elevationM": 1499.0,
     "views": 4356
    },
    {
@@ -658,6 +748,7 @@
     "title": "Mount Rausu",
     "lat": 44.07583333,
     "lon": 145.1225,
+    "elevationM": 1660.0,
     "views": 3375
    }
   ]
