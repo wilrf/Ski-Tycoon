@@ -1,7 +1,7 @@
 import { drawnSkiers } from './crowd';
-import { CONFIG, type Level, type LiftType } from '../config';
-import { dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
-import type { Lift } from '../sim/lifts';
+import { CONFIG, type Level } from '../config';
+import { clamp, dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
+import { liftSpeed, rideSeconds, type Lift } from '../sim/lifts';
 import { profileRun } from '../sim/runs';
 import { terrainExtent } from '../sim/terrain';
 import { activeResort, type World } from '../sim/world';
@@ -9,8 +9,9 @@ import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
+import { baseSpeed, cableGap, drawCarriers, type CarrierView, type Rider } from './liftArt';
+import { airborne, stampSkier } from './skierArt';
 import { skiingPose } from './skierMotion';
-import { scaleBucket, sprite } from './sprites';
 import { stampPine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
@@ -27,7 +28,6 @@ export interface Frame {
 }
 
 const TOWER_SPACING = 70;
-const CARRIER_SPACING: Record<LiftType, number> = { ropeTow: 12, chairlift: 22, gondola: 45 };
 const UI_FONT = '"Nunito", system-ui, sans-serif';
 const VECTOR_TREE_ZOOM = 1.2;
 
@@ -62,7 +62,7 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
     const along = vec((lift.top.x - lift.bottom.x) / length, (lift.top.y - lift.bottom.y) / length);
     const side = vec(-along.y, along.x);
     const offset = (p: Vec2, s: number, a = 0): Vec2 => vec(p.x + side.x * s + along.x * a, p.y + side.y * s + along.y * a);
-    const gap = lift.type === 'ropeTow' ? 0 : lift.type === 'gondola' ? 4 : 3;
+    const gap = cableGap(lift.type);
     return { length, offset, gap, cables: gap === 0 ? [0] : [-gap, gap] };
   };
 
@@ -101,22 +101,7 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
     }
   }
 
-  /** Chairs and cabins go up on one cable and down the other, moving at the lift's speed. */
-  function liftCarriers(lift: LiftShape, time: number, invalid = false): void {
-    if (camera.zoom < 0.6 || lift.type === 'ropeTow' || dist(lift.bottom, lift.top) === 0) return;
-    const { length, offset, cables } = frameOf(lift);
-    const spacing = CARRIER_SPACING[lift.type], shift = (time * CONFIG.lifts[lift.type].speed) % spacing;
-    const box = px(lift.type === 'gondola' ? 3.5 : 2.2, 2);
-    ctx.fillStyle = invalid ? INVALID : LIFT_COLORS[lift.type];
-    for (const s of cables) {
-      for (let d = s < 0 ? shift : spacing - shift; d < length; d += spacing) {
-        const c = at(offset(lift.bottom, s, d));
-        if (c.x > -box && c.y > -box && c.x < view.width + box && c.y < view.height + box) ctx.fillRect(c.x - box / 2, c.y - box / 2, box, box);
-      }
-    }
-  }
-
-  return { at, px, stroke, drawRun, liftStructure, liftCarriers };
+  return { at, px, stroke, drawRun, liftStructure };
 }
 
 const isSelected = (ui: UiState, kind: 'lift' | 'run' | 'skier', id: number): boolean => ui.selection?.kind === kind && ui.selection.id === id;
@@ -253,7 +238,7 @@ function updateStill(ctx: CanvasRenderingContext2D, f: Frame): Still {
 export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { world, ui, camera, view } = f;
   const resort = activeResort(world);
-  const { at, px, stroke, drawRun, liftStructure, liftCarriers } = painter(ctx, camera, view);
+  const { at, px, stroke, drawRun, liftStructure } = painter(ctx, camera, view);
   const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
 
   const sky = ctx.createLinearGradient(0, 0, 0, view.height);
@@ -271,7 +256,22 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.restore();
 
   ctx.lineCap = ctx.lineJoin = 'round';
-  for (const lift of resort.lifts) liftCarriers(lift, time);
+  // Riders are drawn in their seats by the lifts; everyone else is drawn below.
+  const shown = drawnSkiers(world, f.speedIndex, ui.selection);
+  const carrierView: CarrierView = { at, zoom: camera.zoom, view, u: px(1.6, 1.8) };
+  const riders = new Map<number, Rider[]>();
+  for (const s of shown) {
+    const state = s.state;
+    if (state.kind !== 'riding') continue;
+    const lift = resort.lifts.find((l) => l.id === state.liftId);
+    if (!lift) continue;
+    const progress = clamp(state.progress - ((1 - f.alpha) * CONFIG.loop.gameSecondsPerTick) / rideSeconds(lift), 0, 1);
+    const rider = { id: s.id, jacket: JACKETS[s.id % JACKETS.length]!, d: (state.down ? 1 - progress : progress) * lift.length, down: state.down, selected: isSelected(ui, 'skier', s.id) };
+    riders.set(lift.id, [...(riders.get(lift.id) ?? []), rider]);
+  }
+  for (const lift of resort.lifts) {
+    drawCarriers(ctx, { ...lift, speed: liftSpeed(lift) }, time, carrierView, (riders.get(lift.id) ?? []).sort((a, b) => a.id - b.id));
+  }
 
   // Previews for the active build tool.
   if (ui.tool.kind === 'lift') {
@@ -289,7 +289,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     const plan = pendingLiftPlan(world, ui);
     if (plan) {
       liftStructure(plan, false, plan.problems.length > 0);
-      liftCarriers(plan, time, plan.problems.length > 0);
+      drawCarriers(ctx, { ...plan, tier: 0, speed: baseSpeed(plan.type) }, time, carrierView, [], plan.problems.length > 0);
       tag(ctx, at(plan.top), `${Math.round(plan.length)} m · ↑${Math.round(plan.rise)} m · $${plan.cost.toLocaleString('en-US')}`, plan.cost > world.company.money);
     } else if (ui.hover || bottom) {
       const where = at(ui.hover ?? bottom!);
@@ -310,7 +310,8 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     }
   }
 
-  for (const s of drawnSkiers(world, f.speedIndex, ui.selection)) {
+  for (const s of shown) {
+    if (s.state.kind === 'riding') continue;
     const prev = f.previous.get(s.id);
     const skiing = skiingPose(s, resort.runs, f.alpha);
     const pos = skiing?.pos ?? (prev ? lerp(prev, s.pos, f.alpha) : s.pos);
@@ -318,11 +319,10 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (p.x < -20 || p.y < -20 || p.x > view.width + 20 || p.y > view.height + 20) continue;
     if (skiing) headings.set(s.id, skiing.heading);
     else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
-    const riding = s.state.kind === 'riding';
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
     const u = px(1.6, 1.8), jacket = JACKETS[s.id % JACKETS.length]!, heading = headings.get(s.id) ?? Math.PI / 2;
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
-    else stampSkier(ctx, p, heading, u, jacket, riding, isSelected(ui, 'skier', s.id));
+    else stampSkier(ctx, p, heading, u, jacket, false, isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
@@ -342,89 +342,6 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const headings = new Map<number, number>();
-
-/** Headings are snapped to this many directions for skier sprites; finer turns aren't visible at this size. */
-const HEADINGS = 32;
-
-/** Stamps a skier from a cached sprite; the selected skier is drawn live so its highlight can sit underneath. */
-function stampSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, riding: boolean, selected: boolean): void {
-  if (selected) return drawSkier(ctx, p, heading, u, jacket, riding, true);
-  const dpr = ctx.getTransform().a, scale = scaleBucket(u * dpr);
-  const turn = (((Math.round((heading / (Math.PI * 2)) * HEADINGS) % HEADINGS) + HEADINGS) % HEADINGS);
-  // The figure reaches about 2.2u from its centre (ski tips, shadow); 5u square leaves room.
-  const image = sprite(`skier${jacket}${riding ? 'r' : ''}${turn}:${scale}`, 5 * scale, (s) => {
-    drawSkier(s, vec(2.5 * scale, 2.5 * scale), (turn / HEADINGS) * Math.PI * 2, scale, jacket, riding, false);
-  });
-  ctx.drawImage(image, p.x - 2.5 * u, p.y - 2.5 * u, 5 * u, 5 * u);
-}
-
-/**
- * A skier in the air: the shadow stays on the snow, pushed south-east by the sun as they rise, and the
- * figure grows a little as it nears the camera. `lift` is their height in pixels.
- */
-function airborne(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, lift: number): void {
-  ctx.fillStyle = 'rgba(30, 40, 80, 0.22)';
-  ctx.beginPath();
-  ctx.ellipse(p.x + u * 0.9 + lift * 0.7, p.y + u * 0.9 + lift * 0.7, u * 1.1, u * 0.7, Math.PI / 4, 0, Math.PI * 2);
-  ctx.fill();
-  drawSkier(ctx, p, heading, u * (1 + lift / (u * 12)), jacket, false, false, false);
-}
-
-/**
- * A skier seen from above, `u` pixels per metre and facing `heading`: skis and poles, a jacket and a helmet,
- * with a shadow to the south-east. Riders sit without skis showing.
- */
-function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, riding: boolean, selected: boolean, shadow = true): void {
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  if (selected) {
-    ctx.beginPath();
-    ctx.arc(0, 0, u * 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 183, 3, 0.35)';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = SELECTED;
-    ctx.stroke();
-  }
-  if (shadow) {
-    ctx.fillStyle = 'rgba(30, 40, 80, 0.3)';
-    ctx.beginPath();
-    ctx.ellipse(u * 0.9, u * 0.9, u * 1.1, u * 0.7, Math.PI / 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.rotate(heading);
-  if (!riding) {
-    ctx.strokeStyle = '#20242c';
-    ctx.lineCap = 'round';
-    ctx.lineWidth = Math.max(1, u * 0.28);
-    for (const side of [-0.38, 0.38]) {
-      ctx.beginPath();
-      ctx.moveTo(-u * 1.6, side * u);
-      ctx.lineTo(u * 1.8, side * u);
-      ctx.stroke();
-    }
-    ctx.lineWidth = Math.max(0.6, u * 0.12);
-    ctx.strokeStyle = '#8a8f99';
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(0, side * u * 0.55);
-      ctx.lineTo(-u * 1.1, side * u * 1.25);
-      ctx.stroke();
-    }
-  }
-  ctx.fillStyle = jacket;
-  ctx.beginPath();
-  ctx.ellipse(-u * 0.1, 0, u * 0.55, u * 0.75, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = 0.8;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.stroke();
-  ctx.fillStyle = '#f2efe9';
-  ctx.beginPath();
-  ctx.arc(u * 0.15, 0, u * 0.38, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
 
 /** The standard ski-area symbols: green circle, blue square, black diamond, double black diamond. */
 export function difficultySymbol(ctx: CanvasRenderingContext2D, c: Vec2, level: Level, r: number): void {
