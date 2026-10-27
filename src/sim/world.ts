@@ -1,6 +1,6 @@
-import { CONFIG, type BuildingType, type LiftType } from '../config';
+import { CONFIG, type BuildingType, type FeatureType, type LiftType } from '../config';
 import { buildingProblems, type Building } from './buildings';
-import { build, createCompany, earn, emptyLedger, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
+import { build, createCompany, earn, emptyLedger, payUpkeep, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
 import { clamp, dist, pointAlong, vec, type Vec2 } from './geometry';
 import { newGuest, recordVisit, regularsComing, trimGuests, type Guest } from './guests';
 import { boardLift, liftTier, nextTier, planLift, queueSpot, upgradeCost, waitSeconds, type Lift, type LiftPlan } from './lifts';
@@ -8,7 +8,7 @@ import { isBase, liftsFrom, runAt, type Mountain } from './network';
 import { emptyWeek, landProblem, writeReview, type Review, type Week } from './progress';
 import { offerRequest, requestMet, type Request } from './requests';
 import { createRng, nextFloat, nextRange, type Rng } from './rng';
-import { profileRun, runProblems, type Run } from './runs';
+import { featureInvestment, featureProblem, featureUpkeep, profileRun, runProblems, type Run } from './runs';
 import { boardSkier, createSkier, feel, feelPrice, updateSkier, type FeelingTally, type Skier, type SkierContext } from './skiers';
 import { generateTerrain, heightAt, terrainExtent, type Terrain } from './terrain';
 import { advanceForecast, nextWeather, weatherSpec, type Forecast } from './weather';
@@ -76,6 +76,8 @@ export type Command =
   | { readonly type: 'upgradeLift'; readonly id: number }
   | { readonly type: 'buildRun'; readonly points: readonly Vec2[] }
   | { readonly type: 'removeRun'; readonly id: number }
+  | { readonly type: 'addFeature'; readonly runId: number; readonly featureType: FeatureType; readonly at: number }
+  | { readonly type: 'clearFeatures'; readonly runId: number }
   | { readonly type: 'buildBuilding'; readonly buildingType: BuildingType; readonly pos: Vec2 }
   | { readonly type: 'removeBuilding'; readonly id: number }
   | { readonly type: 'setTicketPrice'; readonly price: number }
@@ -334,6 +336,9 @@ function endDay(world: World): DayReport {
   }
 
   world.requests = world.requests.filter((r) => r.status === 'active' || r.deadline > day - 3);
+  // Park crews and cats reshape the features overnight.
+  const upkeep = resort.runs.reduce((sum, r) => sum + featureUpkeep(r), 0);
+  if (upkeep > 0) payUpkeep(world.company, upkeep);
   const ledger = world.company.today;
   world.company.today = emptyLedger();
   world.calendar.day++;
@@ -446,13 +451,33 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
       const problems = runProblemsHere(world, cmd.points);
       if (problems.length > 0) return fail(problems[0]!);
       const name = uniqueName(world.rng, resort.runs.map((r) => r.name), RUN_FIRST, RUN_SECOND);
-      resort.runs.push({ id: world.nextId++, name, points: cmd.points, profile: profileRun(resort.terrain, cmd.points) });
+      resort.runs.push({ id: world.nextId++, name, points: cmd.points, profile: profileRun(resort.terrain, cmd.points), features: [] });
       return { ok: true };
     }
     case 'removeRun': {
-      const before = resort.runs.length;
-      resort.runs = resort.runs.filter((r) => r.id !== cmd.id);
-      return resort.runs.length < before ? { ok: true } : fail('That run is already gone.');
+      const run = resort.runs.find((r) => r.id === cmd.id);
+      if (!run) return fail('That run is already gone.');
+      resort.runs = resort.runs.filter((r) => r !== run);
+      if (run.features.length > 0) refund(company, featureInvestment(run));
+      return { ok: true };
+    }
+    case 'addFeature': {
+      const run = resort.runs.find((r) => r.id === cmd.runId);
+      if (!run) return fail('That run is gone.');
+      const problem = featureProblem(run, cmd.featureType, cmd.at);
+      if (problem) return fail(problem);
+      const { cost, label } = CONFIG.features[cmd.featureType];
+      if (!build(company, cost)) return fail(`${label} costs $${cost.toLocaleString('en-US')}.`);
+      run.features = [...run.features, { type: cmd.featureType, at: cmd.at }].sort((a, b) => a.at - b.at);
+      return { ok: true };
+    }
+    case 'clearFeatures': {
+      const run = resort.runs.find((r) => r.id === cmd.runId);
+      if (!run) return fail('That run is gone.');
+      if (run.features.length === 0) return fail('This run has no features.');
+      refund(company, featureInvestment(run));
+      run.features = [];
+      return { ok: true };
     }
     case 'buildBuilding': {
       const problems = buildingProblemsHere(world, cmd.buildingType, cmd.pos);

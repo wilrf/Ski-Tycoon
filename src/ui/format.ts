@@ -30,6 +30,7 @@ export function thoughtText(t: Thought): string {
     case 'enjoying': return `Here we go down ${t.run}!`;
     case 'tooSteep': return `${t.run} is too steep for me.`;
     case 'lovedRun': return `${t.run} was a great run!`;
+    case 'lovedFeature': return `Loved ${t.feature} on ${t.run}!`;
     case 'okRun': return `${t.run} was fine.`;
     case 'survivedRun': return `I barely survived ${t.run}.`;
     case 'noRunForMe': return `Nothing up ${t.lift} I can ski. Riding back down.`;

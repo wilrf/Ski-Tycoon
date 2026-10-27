@@ -89,6 +89,7 @@ export function createMenus(onChoice: (choice: MenuChoice) => void): {
         ['Skiers', `${r.stats.arrivals} (${r.stats.regulars} regulars)`],
         ['Went home happy', `${happyShare}%`],
         ['Income', `${money(income(r.ledger))} (tickets ${money(r.ledger.tickets)}, food ${money(r.ledger.food)}${r.ledger.bonuses ? `, bonuses ${money(r.ledger.bonuses)}` : ''})`],
+        ...(r.ledger.upkeep ? [['Feature upkeep', money(r.ledger.upkeep)] as [string, string]] : []),
         ['Reputation', `${Math.round(r.reputation.before)}% → ${Math.round(r.reputation.after)}%`],
         ...(r.stats.movedUp ? [['Moved up a level', `${r.stats.movedUp} skiers`] as [string, string]] : []),
         ['Tomorrow', weatherText(r.forecast.today)],
