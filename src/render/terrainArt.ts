@@ -2,6 +2,7 @@ import { CONFIG } from '../config';
 import { vec, type Vec2 } from '../sim/geometry';
 import { heightAt, TerrainType, terrainExtent, type Terrain } from '../sim/terrain';
 import type { Resort } from '../sim/world';
+import { scaleBucket, sprite } from './sprites';
 
 const PIXELS_PER_CELL = 8;
 const CONTOUR_INTERVAL = 20;
@@ -160,9 +161,8 @@ function plantTrees(t: Terrain, entrance: Vec2): Tree[] {
  * A conifer seen from above, in metres: a jagged crown lit from the north-west, a few snow-loaded
  * branches, and a long shadow cast to the south-east.
  */
-export function pine(ctx: CanvasRenderingContext2D, p: Tree): void {
+export function pine(ctx: CanvasRenderingContext2D, p: Tree, seed = Math.round(p.x * 7 + p.y * 13)): void {
   const r = p.height * 0.3;
-  const seed = Math.round(p.x * 7 + p.y * 13);
   ctx.fillStyle = 'rgba(38, 52, 92, 0.3)';
   ctx.beginPath();
   ctx.ellipse(p.x + r * 1.3, p.y + r * 1.1, r * 1.8, r * 0.7, Math.PI / 4, 0, Math.PI * 2);
@@ -186,6 +186,24 @@ export function pine(ctx: CanvasRenderingContext2D, p: Tree): void {
     ctx.arc(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, r * 0.13, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/** How many differently-jagged pines the sprites cycle through; more is indistinguishable. */
+const PINE_VARIANTS = 6;
+
+/**
+ * Stamps a pine from a sprite drawn at about this zoom. `zoom` is pixels per metre, `dpr` the device
+ * pixel ratio, and `c` the tree's position on screen.
+ */
+export function stampPine(ctx: CanvasRenderingContext2D, tree: Tree, c: Vec2, zoom: number, dpr: number): void {
+  const height = Math.round(tree.height), variant = Math.round(tree.x * 7 + tree.y * 13) % PINE_VARIANTS;
+  const r = height * 0.3, before = r * 1.2, span = r * 4.4;
+  const scale = scaleBucket(zoom * dpr);
+  const image = sprite(`pine${height}:${variant}:${scale}`, span * scale, (s) => {
+    s.scale(scale, scale);
+    pine(s, { x: before, y: before, height }, variant);
+  });
+  ctx.drawImage(image, c.x - before * zoom, c.y - before * zoom, span * zoom, span * zoom);
 }
 
 /** The base village: a plowed parking lot along the bottom edge and lodges with snow on their roofs. */
