@@ -7,8 +7,8 @@ import { makeRun, makeSkier, plane } from './helpers';
 
 const line = [vec(500, 100), vec(500, 700)];
 
-const skierOn = (run: Run, skill: SkillLevel, distance: number) => {
-  const s = makeSkier(vec(0, 0), skill);
+const skierOn = (run: Run, skill: SkillLevel, distance: number, id = 1) => {
+  const s = makeSkier(vec(0, 0), skill, id);
   s.state = { kind: 'skiing', runId: run.id, scared: false, distance };
   return s;
 };
@@ -27,8 +27,8 @@ describe('skiing pose', () => {
 
   it('lingers at the edge of each turn and darts through the fall line', () => {
     const run = makeRun(plane(0.3), line);
-    // Sample a beginner's sideways offset evenly down the run, as time would.
-    const offsets = Array.from({ length: 400 }, (_, i) => Math.abs(skiingPose(skierOn(run, 0, 50 + i * 0.5), [run], 1)!.pos.x - 500));
+    // Sample an intermediate's sideways offset evenly down the run, as time would.
+    const offsets = Array.from({ length: 400 }, (_, i) => Math.abs(skiingPose(skierOn(run, 1, 50 + i * 0.5), [run], 1)!.pos.x - 500));
     const width = Math.max(...offsets);
     const nearEdge = offsets.filter((o) => o > 0.7 * width).length / offsets.length;
     // An even sine swing spends about half its time this close to the edge.
@@ -101,5 +101,22 @@ describe('skiing pose', () => {
     expect(Math.abs(Math.cos(pose.heading))).toBeGreaterThan(0.95);
     expect(pose.pos.x).toBeCloseTo(500);
     expect(snowPuffs(skierOn(run, 2, end - 1), [run], 1).length).toBeGreaterThanOrEqual(10);
+  });
+
+  describe('styles', () => {
+    const run = makeRun(plane(0.3), line);
+    const stances = (skill: SkillLevel) =>
+      new Set(Array.from({ length: 12 }, (_, id) => skiingPose(skierOn(run, skill, 100, id + 1), [run], 1)!.stance));
+
+    it('has every beginner snowploughing and only olympians tucking', () => {
+      expect([...stances(0)]).toEqual(['wedge']);
+      expect(stances(3).has('tuck')).toBe(false);
+      expect(stances(4).has('tuck')).toBe(true);
+    });
+
+    it('lets carvers leave clean lines and skidders smear', () => {
+      expect(skiingPose(skierOn(run, 0, 100), [run], 1)!.carving).toBe(false);
+      expect(skiingPose(skierOn(run, 3, 100), [run], 1)!.carving).toBe(true);
+    });
   });
 });
