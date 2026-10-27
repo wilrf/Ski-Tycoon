@@ -23,7 +23,7 @@ const HELP: readonly (readonly [string, string])[] = [
   ['Grow', 'Happy skiers come back, and beginners who enjoy your greens move up a level. Every few days a magazine rates you. Stars pay a bonus and unlock lifts, upgrades, huts and land further up the mountain.'],
   ['Earn', 'Set the ticket price in Resort: higher brings fewer, grumpier skiers. Lodges and huts sell lunch. Requests pay a bonus if you meet them in time.'],
   ['Weather', 'Check tomorrow’s forecast in the day report. Powder days pull in experts, and storms stop exposed lifts high on the mountain.'],
-  ['Keys', 'P (or Space) play and pause, 1–4 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, O resort, U upgrade, M menu, Esc cancel.'],
+  ['Keys', 'P (or Space) play and pause, 1–3 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, O resort, U upgrade, M menu, Esc cancel.'],
 ];
 
 export interface ReportHandlers {

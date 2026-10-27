@@ -16,7 +16,7 @@ Build lifts, paint runs down the mountain, and grow a resort that skiers come ba
 - **Requests:** two at a time, such as a ski club wanting three blues off one lift or a lunch rush. Meet one before its deadline for cash and reputation; miss it and reputation drops.
 - **Weather:** a forecast for tomorrow is shown each evening. Powder days bring experts and make steep runs better; storms stop exposed lifts high on the mountain (covered lifts keep running); spring slush dulls everything.
 - **Food:** a base lodge or a mountain hut at a lift top feeds skiers at lunchtime or when they tire, for money and energy.
-- **Speed:** a ski day takes about 4 minutes at 1×, with 2×, 4× and 6×. At 4× and 6× only a sample of skiers is drawn. Each day ends with a report that pauses the game.
+- **Speed:** a ski day takes about 4 minutes at 1×, with 3× and 6×. At 3× and 6× only a sample of skiers is drawn. Each day ends with a report that pauses the game.
 - **Keys:** Space pause, 1–4 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, P resort, U upgrade lift, M menu, Enter confirm, Backspace undo point, Delete remove, Esc cancel.
 
 The game autosaves at the end of each day and when the tab is hidden. Save and Load use the same slot.
@@ -62,7 +62,7 @@ tests/            Vitest unit tests for the simulation and saves
 
 **The simulation never touches the DOM.** `World` is plain data (no classes, no closures), so it serializes straight to JSON for saves, and the tests run it headless, including a full simulated day. The UI changes the world only through typed `Command`s (`buildLift`, `removeRun`, ...), which validate and return a reason when they fail.
 
-**Fixed timestep.** The sim advances in ticks of 3 game seconds, 35 ticks per real second at 1×. The render loop runs at the display's frame rate and interpolates skier positions between ticks. Speed (pause, 1×, 2×, 4×, 6×) only changes how many ticks run per real second, so results don't depend on frame rate or speed.
+**Fixed timestep.** The sim advances in ticks of 3 game seconds, 35 ticks per real second at 1×. The render loop runs at the display's frame rate and interpolates skier positions between ticks. Speed (pause, 1×, 3×, 6×) only changes how many ticks run per real second, so results don't depend on frame rate or speed.
 
 **Reproducible.** Terrain comes from a seed, and all sim randomness draws from a seeded RNG whose state lives in the world. The same seed and the same commands give the same game, which the tests check.
 
