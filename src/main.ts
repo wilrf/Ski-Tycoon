@@ -2,7 +2,7 @@ import './style.css';
 import { CONFIG } from './config';
 import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
-import { clampCamera, fitCamera, pan, toWorld, zoomAt } from './render/camera';
+import { clampCamera, fitCamera, pan, timeScaleAt, toWorld, zoomAt } from './render/camera';
 import { drawOverlay } from './render/overlay';
 import { draw } from './render/renderer';
 import { bakeTerrain } from './render/terrainArt';
@@ -230,7 +230,9 @@ let lastFrame = performance.now();
 let pendingTicks = 0;
 function frame(now: number): void {
   const { ticksPerSecond, speeds, maxTicksPerFrame } = CONFIG.loop;
-  pendingTicks += (Math.min(now - lastFrame, 250) / 1000) * ticksPerSecond * speeds[speedIndex]!;
+  // Zoomed in, time slows so the player can follow a single skier (see CONFIG.loop.slowMotion).
+  const timeScale = timeScaleAt(camera.zoom, speedIndex);
+  pendingTicks += (Math.min(now - lastFrame, 250) / 1000) * ticksPerSecond * speeds[speedIndex]! * timeScale;
   lastFrame = now;
   // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
   const ticks = Math.min(Math.floor(pendingTicks), maxTicksPerFrame);
@@ -241,7 +243,7 @@ function frame(now: number): void {
     if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
     tick(world).forEach(onEvent);
   }
-  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex };
+  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex, timeScale };
   draw(ctx, frameState);
   drawOverlay(ctx, frameState);
   refreshHud(world, speedIndex);

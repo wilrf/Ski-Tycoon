@@ -83,6 +83,9 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
 
   const weather = CONFIG.weather.kinds[world.weather.today];
   if (world.weather.today === 'storm' || world.weather.today === 'powder') snow(ctx, view.width, view.height, world.calendar.time, weather.windHold ? 160 : 60);
+
+  // Tell the player time has slowed, so a zoomed-in resort doesn't look like the game has stalled.
+  if (f.timeScale < 0.5) pill(ctx, vec(view.width / 2, view.height - 165), '🐢 Slow motion');
 }
 
 const GUIDE_COLORS = ['rgba(31, 157, 85, 1)', 'rgba(29, 111, 224, 1)', 'rgba(21, 24, 29, 1)', 'rgba(214, 40, 40, 1)'];
