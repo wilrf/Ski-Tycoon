@@ -139,7 +139,7 @@ describe('land', () => {
 describe('lodges', () => {
   it('feed hungry skiers at lunchtime, for money and energy', () => {
     const lift = makeLift(t, 1, vec(500, 900), vec(500, 400));
-    const lodge = { id: 9, name: 'Test Lodge', type: 'lodge' as const, pos: vec(520, 940) };
+    const lodge = { id: 9, name: 'Test Lodge', type: 'lodge' as const, pos: vec(520, 940), upgrades: 0 };
     let earned = 0;
     const ctx = makeContext({ terrain: t, lifts: [lift], runs: [] }, { buildings: [lodge], time: 12.5 * 3600, spend: (n) => void (earned += n) });
     const s = { ...makeSkier(vec(500, 950)), energy: 40 };
@@ -209,7 +209,7 @@ describe('save upgrade', () => {
       }],
     };
     const loaded = deserialize(JSON.stringify({ version: 1, savedAt: '', world: v1 }));
-    expect(SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSION).toBe(3);
     if (!loaded.ok) throw new Error(loaded.error);
     expect(activeResort(loaded.world).lifts[0]!.tier).toBe(0);
     expect(activeResort(loaded.world).runs).toHaveLength(1);

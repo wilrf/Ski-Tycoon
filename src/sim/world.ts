@@ -1,5 +1,5 @@
-import { CONFIG, type BuildingType, type LiftType } from '../config';
-import { buildingProblems, type Building } from './buildings';
+import { CONFIG, type ApresPrice, type BuildingType, type LiftType } from '../config';
+import { buildingInvested, buildingProblems, nextLodgeUpgrade, type Building } from './buildings';
 import { build, createCompany, earn, emptyLedger, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
 import { clamp, dist, pointAlong, vec, type Vec2 } from './geometry';
 import { newGuest, recordVisit, regularsComing, trimGuests, type Guest } from './guests';
@@ -26,6 +26,9 @@ export interface DayStats {
   leftHappy: number;
   leftUnhappy: number;
   meals: number;
+  /** Skiers who stayed for après, and those who wanted to but found every lodge full. */
+  apresGuests: number;
+  apresTurnedAway: number;
   /** Guests who moved up a skill level today. */
   movedUp: number;
   /** The longest lift line of the day, in seconds of waiting. */
@@ -50,6 +53,7 @@ export interface Resort extends Mountain {
   regularCredit: number;
   regularsPerSecond: number;
   ticketPrice: number;
+  apresPrice: ApresPrice;
   /** 0 to 100: word of mouth. It drives how many first-time visitors come. */
   reputation: number;
   /** How many bands of CONFIG.land the resort owns, from the bottom up. */
@@ -78,6 +82,8 @@ export type Command =
   | { readonly type: 'removeRun'; readonly id: number }
   | { readonly type: 'buildBuilding'; readonly buildingType: BuildingType; readonly pos: Vec2 }
   | { readonly type: 'removeBuilding'; readonly id: number }
+  | { readonly type: 'upgradeLodge'; readonly id: number }
+  | { readonly type: 'setApresPrice'; readonly price: ApresPrice }
   | { readonly type: 'setTicketPrice'; readonly price: number }
   | { readonly type: 'buyLand' };
 
@@ -101,7 +107,7 @@ export interface DayReport {
 
 export type WorldEvent = DayReport | { readonly type: 'requestDone'; readonly request: Request };
 
-const emptyStats = (): DayStats => ({ arrivals: 0, regulars: 0, leftHappy: 0, leftUnhappy: 0, meals: 0, movedUp: 0, maxWait: 0, feelings: {} });
+const emptyStats = (): DayStats => ({ arrivals: 0, regulars: 0, leftHappy: 0, leftUnhappy: 0, meals: 0, apresGuests: 0, apresTurnedAway: 0, movedUp: 0, maxWait: 0, feelings: {} });
 
 export function createWorld(seed: number): World {
   const terrain = generateTerrain(seed);
@@ -120,7 +126,7 @@ export function createWorld(seed: number): World {
       name: 'Summit Peak', terrain, entrance: vec(extent / 2, extent - 15),
       lifts: [], runs: [], buildings: [], skiers: [], guests: [], coming: [],
       arrivalCredit: 0, regularCredit: 0, regularsPerSecond: 0,
-      ticketPrice: CONFIG.economy.fairTicketPrice, reputation: CONFIG.reputation.start, land: 1,
+      ticketPrice: CONFIG.economy.fairTicketPrice, apresPrice: 'medium', reputation: CONFIG.reputation.start, land: 1,
       today: emptyStats(), week: emptyWeek(),
     }],
   };
@@ -132,6 +138,11 @@ export function createWorld(seed: number): World {
 export const activeResort = (world: World): Resort => world.resorts[0]!;
 
 export const isClosed = (world: World): boolean => world.calendar.time >= CONFIG.calendar.closeHour * 3600;
+
+/** The lifts are closed but the après bars are still serving. */
+export const isApres = (world: World): boolean => isClosed(world) && world.calendar.time < CONFIG.apres.closeHour * 3600;
+
+const atBar = (s: Skier): boolean => s.state.kind === 'toBar' || s.state.kind === 'apres';
 
 const ARRIVAL_SECONDS = (CONFIG.calendar.lastArrivalHour - CONFIG.calendar.openHour) * 3600;
 
@@ -166,8 +177,9 @@ export function tick(world: World, dt: number = CONFIG.loop.gameSecondsPerTick):
   const events: WorldEvent[] = [];
   // Goals about what's built are checked every few game minutes, so finishing one feels immediate.
   if (world.calendar.time % 300 < dt) events.push(...checkRequests(world, null));
-  const swept = world.calendar.time >= CONFIG.calendar.closeHour * 3600 + CONFIG.calendar.sweepAfterClose;
-  if (closed && (swept || world.resorts.every((r) => r.skiers.length === 0))) events.push(endDay(world));
+  // The day ends once everyone has gone home, or when the last bar shuts.
+  const barsShut = world.calendar.time >= CONFIG.apres.closeHour * 3600;
+  if (closed && (barsShut || world.resorts.every((r) => r.skiers.length === 0))) events.push(endDay(world));
   return events;
 }
 
@@ -188,17 +200,29 @@ function stepResort(world: World, resort: Resort, dt: number, closed: boolean): 
   const occupancy = new Map<number, number>();
   for (const s of resort.skiers) {
     if (s.state.kind === 'skiing') crowd.set(s.state.runId, (crowd.get(s.state.runId) ?? 0) + 1);
-    if (s.state.kind === 'eating' || s.state.kind === 'toBuilding') occupancy.set(s.state.buildingId, (occupancy.get(s.state.buildingId) ?? 0) + 1);
+    const k = s.state.kind;
+    if (k === 'eating' || k === 'toBuilding' || k === 'toBar' || k === 'apres') occupancy.set(s.state.buildingId, (occupancy.get(s.state.buildingId) ?? 0) + 1);
   }
   const ctx: SkierContext = {
     mountain: resort, buildings: resort.buildings, occupancy, rng: world.rng, closed, held, exit: resort.entrance, crowd,
     weatherFun: weatherSpec(world.weather.today).fun, time: world.calendar.time,
     journal: { tally: resort.today.feelings, quotes: resort.week.quotes },
-    spend: (amount) => {
-      earn(world.company, 'food', amount);
-      resort.today.meals++;
+    apresPrice: CONFIG.apres.prices[resort.apresPrice],
+    spend: (amount, what) => {
+      earn(world.company, what === 'meal' ? 'food' : 'apres', amount);
+      if (what === 'meal') resort.today.meals++;
+      else resort.today.apresGuests++;
     },
+    turnedAway: () => resort.today.apresTurnedAway++,
   };
+  // Ski patrol sweeps the mountain an hour after close: anyone still out goes home. Après guests are already down.
+  if (world.calendar.time >= CONFIG.calendar.closeHour * 3600 + CONFIG.calendar.sweepAfterClose) {
+    resort.skiers = resort.skiers.filter((s) => {
+      if (atBar(s)) return true;
+      goHome(resort, s, s.state.kind === 'leaving' ? s.state.happy : s.happiness >= CONFIG.skiers.fedUpHappiness);
+      return false;
+    });
+  }
   resort.skiers = resort.skiers.filter((s) => {
     if (updateSkier(ctx, s, dt)) return true;
     goHome(resort, s, s.state.kind === 'leaving' && s.state.happy);
@@ -460,14 +484,27 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
       const spec = CONFIG.buildings[cmd.buildingType];
       build(company, spec.cost);
       const name = uniqueName(world.rng, resort.buildings.map((b) => b.name), BUILDING_WORDS, [BUILDING_SUFFIX[cmd.buildingType]]);
-      resort.buildings.push({ id: world.nextId++, name, type: cmd.buildingType, pos: cmd.pos });
+      resort.buildings.push({ id: world.nextId++, name, type: cmd.buildingType, pos: cmd.pos, upgrades: 0 });
       return { ok: true };
     }
     case 'removeBuilding': {
       const building = resort.buildings.find((b) => b.id === cmd.id);
       if (!building) return fail('That building is already gone.');
       resort.buildings = resort.buildings.filter((b) => b !== building);
-      refund(company, CONFIG.buildings[building.type].cost);
+      refund(company, buildingInvested(building));
+      return { ok: true };
+    }
+    case 'upgradeLodge': {
+      const building = resort.buildings.find((b) => b.id === cmd.id);
+      if (!building) return fail('That building is gone.');
+      const next = nextLodgeUpgrade(building);
+      if (!next) return fail(building.type === 'lodge' ? 'This lodge is fully built out.' : 'Only base lodges can be extended.');
+      if (!build(company, next.cost)) return fail(`The ${next.name.toLowerCase()} costs $${next.cost.toLocaleString('en-US')}.`);
+      building.upgrades++;
+      return { ok: true };
+    }
+    case 'setApresPrice': {
+      resort.apresPrice = cmd.price;
       return { ok: true };
     }
     case 'setTicketPrice': {

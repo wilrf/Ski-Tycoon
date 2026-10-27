@@ -10,7 +10,20 @@ export interface Building {
   readonly name: string;
   readonly type: BuildingType;
   readonly pos: Vec2;
+  /** How many of CONFIG.lodgeUpgrades a lodge has had built onto it, in order. Huts don't grow. */
+  upgrades: number;
 }
+
+/** Seats for lunch and après, including every extension built so far. */
+export const seatsOf = (b: Building): number =>
+  CONFIG.buildings[b.type].seats + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.seats, 0);
+
+/** Everything spent on a building: its own price plus its extensions. */
+export const buildingInvested = (b: Building): number =>
+  CONFIG.buildings[b.type].cost + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.cost, 0);
+
+/** The next extension a lodge can have, or undefined for a hut or a lodge that's fully built out. */
+export const nextLodgeUpgrade = (b: Building) => (b.type === 'lodge' ? CONFIG.lodgeUpgrades[b.upgrades] : undefined);
 
 /** The lift whose top station a hut serves, if it's close enough to one. */
 export const hutLift = (m: Mountain, p: Vec2): Lift | undefined =>

@@ -1,5 +1,5 @@
 import { vec, type Vec2 } from '../src/sim/geometry';
-import type { Level, LiftType } from '../src/config';
+import { CONFIG, type Level, type LiftType } from '../src/config';
 import { planLift, type Lift } from '../src/sim/lifts';
 import { createRng } from '../src/sim/rng';
 import { createSkier, type Skier, type SkierContext } from '../src/sim/skiers';
@@ -36,5 +36,6 @@ export const makeSkier = (pos: Vec2, skill: Level = 1, id = 1): Skier =>
 
 export const makeContext = (mountain: Mountain, overrides: Partial<SkierContext> = {}): SkierContext => ({
   mountain, buildings: [], occupancy: new Map(), rng: rng(3), closed: false, held: new Set(), exit: vec(500, 990),
-  crowd: new Map(), weatherFun: [1, 1, 1, 1], time: 10 * 3600, journal: { tally: {}, quotes: {} }, spend: () => {}, ...overrides,
+  crowd: new Map(), weatherFun: [1, 1, 1, 1], time: 10 * 3600, journal: { tally: {}, quotes: {} },
+  apresPrice: CONFIG.apres.prices.medium, spend: () => {}, turnedAway: () => {}, ...overrides,
 });

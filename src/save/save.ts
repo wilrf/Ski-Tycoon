@@ -4,7 +4,7 @@ import { emptyWeek } from '../sim/progress';
 import type { World } from '../sim/world';
 
 /** Bump this whenever the saved shape of World changes, and add a migration from the previous version. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'summit-tycoon/save';
 
 export interface SaveFile {
@@ -56,6 +56,29 @@ const MIGRATIONS: Readonly<Record<number, (save: VersionedData) => VersionedData
           land: 1,
           today: { ...(r['today'] as Obj), regulars: 0, meals: 0, movedUp: 0, maxWait: 0, feelings: {} },
           week: emptyWeek(),
+        })),
+      },
+    };
+  },
+  // Version 3 added après: lodge extensions, the après price, and après lines in the ledger and the day's
+  // stats. Skiers mid-day get no après loyalty yet.
+  2: (save) => {
+    type Obj = Record<string, unknown>;
+    const w = save.world as Obj;
+    const company = w['company'] as Obj;
+    const resorts = w['resorts'] as Obj[];
+    return {
+      ...save,
+      version: 3,
+      world: {
+        ...w,
+        company: { ...company, today: { ...(company['today'] as Obj), apres: 0 } },
+        resorts: resorts.map((r) => ({
+          ...r,
+          buildings: (r['buildings'] as Obj[]).map((b) => ({ ...b, upgrades: 0 })),
+          skiers: (r['skiers'] as Obj[]).map((s) => ({ ...s, apresLoyalty: 0 })),
+          apresPrice: 'medium',
+          today: { ...(r['today'] as Obj), apresGuests: 0, apresTurnedAway: 0 },
         })),
       },
     };
