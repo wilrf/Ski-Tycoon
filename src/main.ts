@@ -10,6 +10,7 @@ import { loadGame, saveGame } from './save/save';
 import type { Vec2 } from './sim/geometry';
 import { terrainExtent } from './sim/terrain';
 import { activeResort, createWorld, tick, type World, type WorldEvent } from './sim/world';
+import { fixFor } from './ui/fixes';
 import { money, requestTitle } from './ui/format';
 import { createHud, type MenuCommand } from './ui/hud';
 import { createMenus, type MenuChoice } from './ui/menu';
@@ -74,6 +75,9 @@ function save(): void {
 
 function onEvent(e: WorldEvent): void {
   if (e.type === 'requestDone') return toast(`✅ ${requestTitle(e.request)}: +${money(e.request.reward)}`, 5);
+  // The game waits at the end of each day until the report is read.
+  if (!menus.reportOpen()) speedBeforeReport = speedIndex || speedBeforeReport;
+  speedIndex = 0;
   menus.showReport(e);
   const store = storage();
   if (store) saveGame(store, world);
@@ -105,7 +109,7 @@ function openMenu(): void {
 }
 function closeMenu(): void {
   menus.hide();
-  speedIndex = speedBeforeMenu;
+  speedIndex = menus.reportOpen() ? 0 : speedBeforeMenu;
 }
 function choose(choice: MenuChoice): void {
   switch (choice) {
@@ -122,7 +126,19 @@ function choose(choice: MenuChoice): void {
     case 'help': return;
   }
 }
-const menus = createMenus(choose);
+let speedBeforeReport = 1;
+const menus = createMenus(choose, {
+  fixFor: (kind, place) => fixFor(world, kind, place),
+  close(fix) {
+    // Picking a fix leaves the game paused on the culprit; starting the day resumes at the old speed.
+    if (!fix) speedIndex = speedBeforeReport;
+    else if (fix.kind === 'select') {
+      selectTool(ui, { kind: 'select' });
+      ui.selection = fix.selection;
+    } else if (fix.kind === 'tool') selectTool(ui, toolFor(fix.tool));
+    else act(fix.action);
+  },
+});
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -134,7 +150,13 @@ function resize(): void {
   clampCamera(camera, extent(), view);
 }
 
-const refreshHud = createHud({ speed: (i) => void (speedIndex = i), menu, resort: () => act('resort') });
+// While the day report is up, the clock waits for its Start button.
+function setSpeed(index: number): void {
+  if (menus.reportOpen()) return toast('Read the day report, then start the next day.');
+  speedIndex = index;
+}
+
+const refreshHud = createHud({ speed: setSpeed, menu, resort: () => act('resort') });
 const renderPanel = createPanel(document.getElementById('panel')!, act);
 const refreshToolbar = createToolbar(document.getElementById('toolbar')!, (choice) => selectTool(ui, toolFor(choice)));
 let speedBeforePause = 1;
@@ -170,9 +192,10 @@ attachKeyboard((command) => {
   switch (command.type) {
     case 'action': return act(command.action);
     case 'tool': return selectTool(ui, toolFor(command.tool));
-    case 'speed': return void (speedIndex = command.index);
+    case 'speed': return setSpeed(command.index);
     case 'menu': return menus.isOpen() ? closeMenu() : openMenu();
     case 'togglePause':
+      if (menus.reportOpen()) return setSpeed(0);
       if (speedIndex > 0) speedBeforePause = speedIndex;
       speedIndex = speedIndex > 0 ? 0 : speedBeforePause;
   }
@@ -200,7 +223,8 @@ function frame(now: number): void {
   // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
   const ticks = Math.min(Math.floor(pendingTicks), maxTicksPerFrame);
   pendingTicks = ticks === maxTicksPerFrame ? 0 : pendingTicks - ticks;
-  for (let n = 0; n < ticks; n++) {
+  // Stops early if a tick ends the day, so the report opens on the evening it describes.
+  for (let n = 0; n < ticks && speedIndex > 0; n++) {
     // Only the last tick's starting positions matter for drawing between ticks.
     if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
     tick(world).forEach(onEvent);

@@ -4,14 +4,13 @@ import { landEdge } from '../sim/progress';
 import { featureProblem, gradeToDifficulty } from '../sim/runs';
 import { cellGrade, terrainExtent, type Terrain } from '../sim/terrain';
 import { activeResort, buildingProblemsHere, heldLifts } from '../sim/world';
-import { FEELING_EMOJI, money } from '../ui/format';
+import { money } from '../ui/format';
 import { toScreen } from './camera';
 import type { Frame } from './renderer';
 
 /**
  * Gameplay layers drawn on top of the map: the slope guide while drawing a run, land the resort hasn't
- * bought, lodges and huts, wind holds, falling snow, and the emoji that pops above a skier when
- * something changes how they feel.
+ * bought, lodges and huts, wind holds and falling snow.
  */
 export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { world, ui, camera, view } = f;
@@ -75,31 +74,6 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
     const lift = resort.lifts.find((l) => l.id === id)!;
     pill(ctx, at(lerp(lift.bottom, lift.top, 0.35)), '🌬️ Wind hold');
   }
-
-  // Emoji above skiers whose feelings just changed; fed-up skiers keep a red marker so trouble is visible.
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  const lift = Math.max(1.8, 1.6 * camera.zoom) * 2 + 6;
-  for (const s of resort.skiers) {
-    const prev = f.previous.get(s.id);
-    const p = at(prev ? lerp(prev, s.pos, f.alpha) : s.pos);
-    if (p.x < -20 || p.y < -20 || p.x > view.width + 20 || p.y > view.height + 20) continue;
-    const age = s.felt ? world.calendar.time - s.felt.at : Infinity;
-    if (age < CONFIG.skiers.feelingShowSeconds) {
-      const t = age / CONFIG.skiers.feelingShowSeconds;
-      ctx.globalAlpha = t < 0.75 ? 1 : (1 - t) * 4;
-      ctx.font = `${Math.round(13 + 3 * Math.min(1, camera.zoom))}px system-ui, sans-serif`;
-      ctx.fillText(FEELING_EMOJI[s.felt!.kind], p.x, p.y - lift - t * 10);
-      ctx.globalAlpha = 1;
-    } else if (s.happiness < CONFIG.skiers.fedUpHappiness + 15) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y - lift + 2, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#e63946';
-      ctx.fill();
-    }
-  }
-  ctx.textAlign = 'start';
-  ctx.textBaseline = 'alphabetic';
 
   const weather = CONFIG.weather.kinds[world.weather.today];
   if (world.weather.today === 'storm' || world.weather.today === 'powder') snow(ctx, view.width, view.height, world.calendar.time, weather.windHold ? 160 : 60);

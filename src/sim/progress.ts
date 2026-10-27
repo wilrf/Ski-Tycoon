@@ -66,3 +66,9 @@ export function landProblem(resort: Resort, points: readonly Vec2[]): string | n
   if (!next || points.every((p) => p.y >= landEdge(resort))) return null;
   return `That’s on ${next.name} land, which you don’t own yet. Buy it from the Resort panel.`;
 }
+
+/** Where a feeling happened most today, or '' if it isn't tied to a place. */
+export function worstPlace(tally: FeelingTally, kind: FeelingKind): string {
+  const places = Object.entries(tally[kind]?.places ?? {});
+  return places.sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+}
