@@ -26,14 +26,104 @@ const CARRIER_SPACING: Record<LiftType, number> = { ropeTow: 12, chairlift: 22, 
 const UI_FONT = '"Nunito", system-ui, sans-serif';
 const VECTOR_TREE_ZOOM = 1.2;
 
-export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
-  const { world, ui, camera, view } = f;
-  const resort = activeResort(world);
+/** Helpers bound to one canvas and camera, shared by the still and live layers. */
+function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
   const at = (p: Vec2): Vec2 => toScreen(camera, view, p);
   /** A world size in pixels, never smaller than minPx so things stay visible when zoomed out. */
   const px = (m: number, minPx: number): number => Math.max(minPx, m * camera.zoom);
-  const isSelected = (kind: 'lift' | 'run' | 'skier', id: number): boolean => ui.selection?.kind === kind && ui.selection.id === id;
-  const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
+  const path = (points: readonly Vec2[]): void => {
+    ctx.beginPath();
+    points.forEach((p, i) => (i === 0 ? ctx.moveTo(at(p).x, at(p).y) : ctx.lineTo(at(p).x, at(p).y)));
+  };
+  const stroke = (color: string, width: number, dash: number[] = []): void => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  const runView: RunView = {
+    zoom: camera.zoom,
+    at,
+    min: toWorld(camera, view, vec(0, 0)),
+    max: toWorld(camera, view, vec(view.width, view.height)),
+  };
+  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null): void => paintRun(ctx, points, level, outline, runView);
+
+  type LiftShape = Pick<Lift, 'type' | 'bottom' | 'top'>;
+  const frameOf = (lift: LiftShape) => {
+    const length = dist(lift.bottom, lift.top);
+    const along = vec((lift.top.x - lift.bottom.x) / length, (lift.top.y - lift.bottom.y) / length);
+    const side = vec(-along.y, along.x);
+    const offset = (p: Vec2, s: number, a = 0): Vec2 => vec(p.x + side.x * s + along.x * a, p.y + side.y * s + along.y * a);
+    const gap = lift.type === 'ropeTow' ? 0 : lift.type === 'gondola' ? 4 : 3;
+    return { length, offset, gap, cables: gap === 0 ? [0] : [-gap, gap] };
+  };
+
+  /** Towers, cables and stations: everything about a lift that doesn't move. */
+  function liftStructure(lift: LiftShape, selected: boolean, invalid = false): void {
+    if (dist(lift.bottom, lift.top) === 0) return;
+    const { length, offset, gap, cables } = frameOf(lift);
+    const color = invalid ? INVALID : LIFT_COLORS[lift.type];
+    if (selected) {
+      path([lift.bottom, lift.top]);
+      stroke(SELECTED, px(gap * 2 + 8, 10));
+    }
+    for (let d = TOWER_SPACING / 2; d < length; d += TOWER_SPACING) {
+      const t = at(offset(lift.bottom, 0, d)), a = at(offset(lift.bottom, -gap - 1.5, d)), b = at(offset(lift.bottom, gap + 1.5, d));
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      stroke('#3b3f4a', px(1.5, 1.5));
+      ctx.fillStyle = '#3b3f4a';
+      ctx.fillRect(t.x - 1.5, t.y - 1.5, 3, 3);
+    }
+    for (const s of cables) {
+      path([offset(lift.bottom, s), offset(lift.top, s)]);
+      stroke('#2b2f38', px(0.6, 1));
+    }
+    for (const [station, dir] of [[lift.bottom, -1], [lift.top, 1]] as const) {
+      const corners = [[-1, 0], [1, 0], [1, 1], [-1, 1]].map(([s, a]) => at(offset(station, s! * (gap + 5), dir * a! * 9 - dir * 3)));
+      ctx.beginPath();
+      corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    }
+  }
+
+  /** Chairs and cabins go up on one cable and down the other, moving at the lift's speed. */
+  function liftCarriers(lift: LiftShape, time: number, invalid = false): void {
+    if (camera.zoom < 0.6 || lift.type === 'ropeTow' || dist(lift.bottom, lift.top) === 0) return;
+    const { length, offset, cables } = frameOf(lift);
+    const spacing = CARRIER_SPACING[lift.type], shift = (time * CONFIG.lifts[lift.type].speed) % spacing;
+    const box = px(lift.type === 'gondola' ? 3.5 : 2.2, 2);
+    ctx.fillStyle = invalid ? INVALID : LIFT_COLORS[lift.type];
+    for (const s of cables) {
+      for (let d = s < 0 ? shift : spacing - shift; d < length; d += spacing) {
+        const c = at(offset(lift.bottom, s, d));
+        ctx.fillRect(c.x - box / 2, c.y - box / 2, box, box);
+      }
+    }
+  }
+
+  return { at, px, stroke, drawRun, liftStructure, liftCarriers };
+}
+
+const isSelected = (ui: UiState, kind: 'lift' | 'run' | 'skier', id: number): boolean => ui.selection?.kind === kind && ui.selection.id === id;
+
+/**
+ * The parts of the map that only change when the camera moves or something is built: sky, terrain, trees,
+ * runs and lift structures. They are painted once into an offscreen canvas and pasted every frame, which
+ * is far cheaper than redrawing thousands of trees and snow marks.
+ */
+function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const { world, ui, camera, view } = f;
+  const resort = activeResort(world);
+  const { at, drawRun, liftStructure } = painter(ctx, camera, view);
 
   const sky = ctx.createLinearGradient(0, 0, 0, view.height);
   sky.addColorStop(0, '#2b4c7e');
@@ -57,76 +147,49 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     ctx.restore();
   }
 
-  const path = (points: readonly Vec2[]): void => {
-    ctx.beginPath();
-    points.forEach((p, i) => (i === 0 ? ctx.moveTo(at(p).x, at(p).y) : ctx.lineTo(at(p).x, at(p).y)));
-  };
-  const stroke = (color: string, width: number, dash: number[] = []): void => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.setLineDash(dash);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  };
   ctx.lineCap = ctx.lineJoin = 'round';
+  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null);
+  for (const lift of resort.lifts) liftStructure(lift, isSelected(ui, 'lift', lift.id));
+}
 
-  const runView: RunView = {
-    zoom: camera.zoom,
-    at,
-    min: toWorld(camera, view, vec(0, 0)),
-    max: toWorld(camera, view, vec(view.width, view.height)),
-  };
-  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null): void => paintRun(ctx, points, level, outline, runView);
-  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected('run', run.id) ? SELECTED : null);
+/** Everything that changes what drawStill paints. Cheap to build, so it is checked every frame. */
+function stillKey(f: Frame, canvas: { width: number; height: number }): string {
+  const { world, ui, camera, view } = f;
+  const resort = activeResort(world);
+  return [
+    camera.x, camera.y, camera.zoom, view.width, view.height, canvas.width, canvas.height,
+    ui.selection ? `${ui.selection.kind}${'id' in ui.selection ? ui.selection.id : ''}` : '',
+    resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}`).join(','),
+    resort.lifts.map((l) => `${l.id}:${l.type}`).join(','),
+  ].join('|');
+}
 
-  for (const lift of resort.lifts) drawLift(lift, isSelected('lift', lift.id));
+let still: { canvas: HTMLCanvasElement; key: string; terrain: TerrainArt } | null = null;
 
-  function drawLift(lift: Pick<Lift, 'type' | 'bottom' | 'top'>, selected: boolean, invalid = false): void {
-    const length = dist(lift.bottom, lift.top);
-    if (length === 0) return;
-    const along = vec((lift.top.x - lift.bottom.x) / length, (lift.top.y - lift.bottom.y) / length);
-    const side = vec(-along.y, along.x);
-    const offset = (p: Vec2, s: number, a = 0): Vec2 => vec(p.x + side.x * s + along.x * a, p.y + side.y * s + along.y * a);
-    const color = invalid ? INVALID : LIFT_COLORS[lift.type];
-    const gap = lift.type === 'ropeTow' ? 0 : lift.type === 'gondola' ? 4 : 3;
-    if (selected) {
-      path([lift.bottom, lift.top]);
-      stroke(SELECTED, px(gap * 2 + 8, 10));
-    }
-    for (let d = TOWER_SPACING / 2; d < length; d += TOWER_SPACING) {
-      const t = at(offset(lift.bottom, 0, d)), a = at(offset(lift.bottom, -gap - 1.5, d)), b = at(offset(lift.bottom, gap + 1.5, d));
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      stroke('#3b3f4a', px(1.5, 1.5));
-      ctx.fillStyle = '#3b3f4a';
-      ctx.fillRect(t.x - 1.5, t.y - 1.5, 3, 3);
-    }
-    // Carriers go up on one cable and down the other, moving at the lift's speed.
-    const spacing = CARRIER_SPACING[lift.type], shift = (time * CONFIG.lifts[lift.type].speed) % spacing;
-    for (const s of gap === 0 ? [0] : [-gap, gap]) {
-      path([offset(lift.bottom, s), offset(lift.top, s)]);
-      stroke('#2b2f38', px(0.6, 1));
-      if (camera.zoom < 0.6 || lift.type === 'ropeTow') continue;
-      const box = px(lift.type === 'gondola' ? 3.5 : 2.2, 2);
-      for (let d = s < 0 ? shift : spacing - shift; d < length; d += spacing) {
-        const c = at(offset(lift.bottom, s, d));
-        ctx.fillStyle = color;
-        ctx.fillRect(c.x - box / 2, c.y - box / 2, box, box);
-      }
-    }
-    for (const [station, dir] of [[lift.bottom, -1], [lift.top, 1]] as const) {
-      const corners = [[-1, 0], [1, 0], [1, 1], [-1, 1]].map(([s, a]) => at(offset(station, s! * (gap + 5), dir * a! * 9 - dir * 3)));
-      ctx.beginPath();
-      corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#ffffff';
-      ctx.stroke();
-    }
+export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const { world, ui, camera, view } = f;
+  const resort = activeResort(world);
+  const { at, px, stroke, drawRun, liftStructure, liftCarriers } = painter(ctx, camera, view);
+  const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
+
+  // The still layer is kept at device pixels, so paste it with the canvas's scale undone.
+  const key = stillKey(f, ctx.canvas);
+  if (!still || still.key !== key || still.terrain !== f.terrain) {
+    const canvas = still?.canvas ?? document.createElement('canvas');
+    canvas.width = ctx.canvas.width;
+    canvas.height = ctx.canvas.height;
+    const sctx = canvas.getContext('2d')!;
+    sctx.setTransform(ctx.getTransform());
+    drawStill(sctx, f);
+    still = { canvas, key, terrain: f.terrain };
   }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(still.canvas, 0, 0);
+  ctx.restore();
+
+  ctx.lineCap = ctx.lineJoin = 'round';
+  for (const lift of resort.lifts) liftCarriers(lift, time);
 
   // Previews for the active build tool.
   if (ui.tool.kind === 'lift') {
@@ -143,7 +206,8 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     }
     const plan = pendingLiftPlan(world, ui);
     if (plan) {
-      drawLift(plan, false, plan.problems.length > 0);
+      liftStructure(plan, false, plan.problems.length > 0);
+      liftCarriers(plan, time, plan.problems.length > 0);
       tag(ctx, at(plan.top), `${Math.round(plan.length)} m · ↑${Math.round(plan.rise)} m · $${plan.cost.toLocaleString('en-US')}`, plan.cost > world.company.money);
     } else if (ui.hover || bottom) {
       const where = at(ui.hover ?? bottom!);
@@ -172,7 +236,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     const riding = s.state.kind === 'riding';
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
-    drawSkier(ctx, p, headings.get(s.id) ?? Math.PI / 2, px(1.6, 1.8), JACKETS[s.id % JACKETS.length]!, riding, isSelected('skier', s.id));
+    drawSkier(ctx, p, headings.get(s.id) ?? Math.PI / 2, px(1.6, 1.8), JACKETS[s.id % JACKETS.length]!, riding, isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
