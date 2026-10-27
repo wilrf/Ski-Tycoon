@@ -8,7 +8,7 @@ import { terrainExtent } from '../sim/terrain';
 import { activeResort, type World } from '../sim/world';
 import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
-import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
+import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
 import { airborne, stampSkier } from './skierArt';
@@ -270,7 +270,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     const lift = resort.lifts.find((l) => l.id === state.liftId);
     if (!lift) continue;
     const progress = clamp(state.progress - ((1 - f.alpha) * CONFIG.loop.gameSecondsPerTick) / rideSeconds(lift), 0, 1);
-    const rider = { id: s.id, jacket: JACKETS[s.id % JACKETS.length]!, d: (state.down ? 1 - progress : progress) * lift.length, down: state.down, selected: isSelected(ui, 'skier', s.id) };
+    const rider = { id: s.id, jacket: skillJacket(s), d: (state.down ? 1 - progress : progress) * lift.length, down: state.down, selected: isSelected(ui, 'skier', s.id) };
     riders.set(lift.id, [...(riders.get(lift.id) ?? []), rider]);
   }
   for (const lift of resort.lifts) {
@@ -336,7 +336,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (placed) headings.set(s.id, placed.heading);
     else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
-    const u = px(1.6, 1.8), jacket = JACKETS[s.id % JACKETS.length]!, heading = headings.get(s.id) ?? Math.PI / 2;
+    const u = px(1.6, 1.8), jacket = skillJacket(s), heading = headings.get(s.id) ?? Math.PI / 2;
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
     else stampSkier(ctx, p, heading, u, jacket, placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
   }
