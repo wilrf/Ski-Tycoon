@@ -16,6 +16,8 @@ export interface SkierPose {
   readonly stance: Stance;
   /** Carvers leave pencil-thin edge lines; skidders smear the snow. */
   readonly carving: boolean;
+  /** Out of sight inside a tunnel. */
+  readonly hidden: boolean;
 }
 
 /**
@@ -70,14 +72,31 @@ function styleOf(s: Skier, run: Run): Style {
   return styles[s.id % styles.length]!;
 }
 
-/** Distance skiers straighten out over before a jump so they hit it square. Metres. */
+/** Distance skiers straighten out over before a feature so they hit it square. Metres. */
 const RUN_IN = 12;
-const JUMPS: Partial<Record<FeatureType, { readonly length: number; readonly peak: number }>> = {
-  smallJump: { length: 9, peak: 1.4 },
-  mediumJump: { length: 15, peak: 2.6 },
-  largeJump: { length: 24, peak: 4.2 },
-};
 
+/**
+ * The shapes built onto runs, in metres from where each starts, shared with the art so skiers ride exactly
+ * what's drawn. Sized like real park and family-zone builds: knee-high rollers a few metres apart, banked
+ * turns snaking down the trail, a snow tunnel a few metres long, and tabletops whose deck is the gap to clear.
+ */
+export const FEATURE_SHAPES = {
+  rollers: { length: 24, spacing: 6, height: 0.8 },
+  berms: { length: 30, spacing: 10 },
+  tunnel: { length: 12, width: 6 },
+  smallJump: { length: 9, peak: 1.4, width: 5 },
+  mediumJump: { length: 15, peak: 2.6, width: 6 },
+  largeJump: { length: 24, peak: 4.2, width: 8 },
+} as const satisfies Record<FeatureType, { readonly length: number; readonly [size: string]: number }>;
+
+const isJump = (type: FeatureType): type is 'smallJump' | 'mediumJump' | 'largeJump' => type.endsWith('Jump');
+/** How far to the side skiers pass a jump or tunnel that isn't for them. Metres. */
+const AROUND = 7.5;
+/** How far out a beginner rides up each berm wall; better skiers climb it a little higher. Metres. */
+const BERM_SWING = 7;
+
+/** Rollers and berms span the whole run, so everyone rides them; a jump or tunnel is skied around unless the skier likes it. */
+const ridesFeature = (s: Skier, type: FeatureType): boolean => type === 'rollers' || type === 'berms' || CONFIG.features[type].appeal[s.skill] > 0;
 /** Where a skiing skier is drawn this frame, or null for anyone not on a run. */
 export function skiingPose(s: Skier, runs: readonly Run[], alpha: number): SkierPose | null {
   const on = onRun(s, runs, alpha);
@@ -114,7 +133,7 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
   const back = (theta - SPRAY_AT - turn * Math.PI) / k;
   const side = d - back > 0 ? sideAt(s, run, d - back, scared) : 0;
   // No spray while running straight at a jump; otherwise it leaves the outside of the turn, the side the skier swung out to.
-  if (back < SPRAY_FADE && side !== 0) {
+  if (back < SPRAY_FADE && side !== 0 && rideAt(s, run, d - back).straighten > 0.5) {
     const { t, n } = frameAt(run, d - back), out = Math.sign(side);
     const angle = Math.atan2(n.y * out + t.y * 0.4, n.x * out + t.x * 0.4);
     const size = style.spray * (scared ? 1.3 : 1);
@@ -128,12 +147,23 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
     spray(puffs, poseAt(s, run, d, scared).pos, Math.atan2(t.y, t.x), 0.9, 10, 1.4 * stop, 0.35, s.id * 389 + run.id);
   }
 
-  // A ring of snow where a skier lands a jump.
   for (const f of run.features) {
-    const jump = JUMPS[f.type];
-    if (!jump || CONFIG.features[f.type].appeal[s.skill] <= 0) continue;
-    const since = d - (f.at + jump.length);
-    if (since >= 0 && since < SPRAY_FADE) spray(puffs, poseAt(s, run, f.at + jump.length, scared).pos, 0, Math.PI, LANDING_COUNT, 1.4, since / SPRAY_FADE, s.id * 977 + f.at);
+    if (!ridesFeature(s, f.type)) continue;
+    // A ring of snow where a skier lands a jump.
+    if (isJump(f.type)) {
+      const since = d - (f.at + FEATURE_SHAPES[f.type].length);
+      if (since >= 0 && since < SPRAY_FADE) spray(puffs, poseAt(s, run, f.at + FEATURE_SHAPES[f.type].length, scared).pos, 0, Math.PI, LANDING_COUNT, 1.4, since / SPRAY_FADE, s.id * 977 + f.at);
+    }
+    // Snow thrown off the top of each berm wall, outward and downhill.
+    if (f.type === 'berms') {
+      const { spacing, length } = FEATURE_SHAPES.berms;
+      for (let wall = spacing / 2; wall < length; wall += spacing) {
+        const since = d - (f.at + wall);
+        if (since < 0 || since >= SPRAY_FADE) continue;
+        const { t, n } = frameAt(run, f.at + wall), out = Math.sign(Math.sin((Math.PI * wall) / spacing));
+        spray(puffs, poseAt(s, run, f.at + wall, scared).pos, Math.atan2(n.y * out + t.y * 0.5, n.x * out + t.x * 0.5), 0.5, 8, 1.2, since / SPRAY_FADE, s.id * 613 + f.at + wall);
+      }
+    }
   }
   return puffs;
 }
@@ -201,21 +231,56 @@ function frameAt(run: Run, d: number): { here: Vec2; t: Vec2; n: Vec2 } {
   return { here, t, n: vec(-t.y, t.x) };
 }
 
-/** Jumps a skier's level enjoys get hit straight on; others are skied around like the simulation says. */
-function jumpAt(s: Skier, run: Run, d: number): { straighten: number; air: number } {
-  let straighten = 1, air = 0;
+/** What the run's features are doing to a skier at `d`. */
+interface Ride {
+  /** 1 is free turning; 0 is held on the feature's line. */
+  readonly straighten: number;
+  /** Metres to the side the feature pushes the skier: up a berm, or around a jump that isn't for them. */
+  readonly lane: number;
+  readonly air: number;
+  /** Knees soaking up a roller. */
+  readonly crouch: boolean;
+  readonly hidden: boolean;
+}
+
+/**
+ * How the features shape a skier's line. Jumps are hit straight and flown; rollers are popped by stronger
+ * skiers and absorbed by the rest; berms swing everyone from wall to wall; the tunnel swallows them for a
+ * moment. Anything a skier's level doesn't enjoy, they ride around, as the simulation says.
+ */
+function rideAt(s: Skier, run: Run, d: number): Ride {
+  let straighten = 1, lane = 0, air = 0, crouch = false, hidden = false;
   for (const f of run.features) {
-    const jump = JUMPS[f.type];
-    if (!jump || CONFIG.features[f.type].appeal[s.skill] <= 0) continue;
-    const into = d - f.at;
-    if (into >= 0 && into <= jump.length) {
-      const t = into / jump.length;
-      air = 4 * t * (1 - t) * jump.peak;
-      straighten = 0;
-    } else if (into < 0 && into > -RUN_IN) straighten = Math.min(straighten, -into / RUN_IN);
-    else if (into > jump.length && into < jump.length + RUN_IN) straighten = Math.min(straighten, (into - jump.length) / RUN_IN);
+    const into = d - f.at, length = FEATURE_SHAPES[f.type].length;
+    const away = into < 0 ? -into : into > length ? into - length : 0;
+    if (away >= RUN_IN) continue;
+    const near = 1 - away / RUN_IN, ease = near * near * (3 - 2 * near), inside = away === 0;
+    if (!ridesFeature(s, f.type)) {
+      straighten = Math.min(straighten, 1 - ease);
+      lane += (s.id % 2 === 0 ? 1 : -1) * AROUND * ease;
+      continue;
+    }
+    if (f.type === 'rollers') {
+      // Short turns carry on over the rollers; crests sit halfway between each roller's start and end.
+      straighten = Math.min(straighten, 1 - 0.6 * ease);
+      if (!inside) continue;
+      const { spacing, height } = FEATURE_SHAPES.rollers, past = (into % spacing) / spacing - 0.5;
+      if (s.skill >= 2 && past >= 0 && past < 0.4) air = Math.max(air, 4 * (past / 0.4) * (1 - past / 0.4) * height * 0.6);
+      else if (s.skill < 2 && Math.abs(past) < 0.12) crouch = true;
+    } else if (f.type === 'berms') {
+      // One swing per berm, peaking on each wall in turn; the swing is zero at both ends of the set.
+      straighten = Math.min(straighten, 1 - ease);
+      if (inside) lane += (BERM_SWING + s.skill * 0.5) * Math.sin((Math.PI * into) / FEATURE_SHAPES.berms.spacing);
+    } else {
+      straighten = Math.min(straighten, 1 - ease);
+      if (inside && f.type === 'tunnel') hidden = true;
+      if (inside && isJump(f.type)) {
+        const t = into / length;
+        air = Math.max(air, 4 * t * (1 - t) * FEATURE_SHAPES[f.type].peak);
+      }
+    }
   }
-  return { straighten, air };
+  return { straighten, lane, air, crouch, hidden };
 }
 
 /**
@@ -228,7 +293,8 @@ function sideAt(s: Skier, run: Run, d: number, scared: boolean): number {
   const swing = Math.sin(theta + (style.rhythm / 2) * Math.sin(2 * theta));
   const shaped = Math.sign(swing) * Math.pow(Math.abs(swing), style.shape);
   const wobble = style.wobble * Math.sin(d * 1.7 + s.id) * Math.sin(d * 0.63 + s.id * 3);
-  return (shaped * style.width + wobble) * jumpAt(s, run, d).straighten * (scared ? 1.3 : 1) * (1 - stopping(run, d));
+  const ride = rideAt(s, run, d);
+  return ((shaped * style.width + wobble) * ride.straighten * (scared ? 1.3 : 1) + ride.lane) * (1 - stopping(run, d));
 }
 
 function poseAt(s: Skier, run: Run, d: number, scared: boolean): SkierPose {
@@ -241,13 +307,15 @@ function poseAt(s: Skier, run: Run, d: number, scared: boolean): SkierPose {
   // can't hockey stop: they push their snowplough wider instead.
   const style = styleOf(s, run), stop = style.stance === 'wedge' ? 0 : stopping(run, d);
   const swing = (s.id % 2 === 0 ? 1 : -1) * (Math.PI / 2) * stop * stop * (3 - 2 * stop);
+  const ride = rideAt(s, run, d);
   return {
     pos,
     // Settling into the stop, the line straightens back to the run's direction before the skis swing across.
     heading: Math.atan2((1 - stop) * (ahead.y - behind.y) + stop * t.y, (1 - stop) * (ahead.x - behind.x) + stop * t.x) + swing,
-    air: jumpAt(s, run, d).air,
-    stance: stop > 0.3 ? 'parallel' : style.stance,
+    air: ride.air,
+    stance: stop > 0.3 ? 'parallel' : ride.crouch ? 'tuck' : style.stance,
     carving: style.carves && !scared,
+    hidden: ride.hidden,
   };
 }
 

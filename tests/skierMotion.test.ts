@@ -44,6 +44,33 @@ describe('skiing pose', () => {
     expect(distToSegment(lip.pos, line[0]!, line[1]!)).toBeLessThan(0.01);
   });
 
+  it('passes well to the side of a jump they skip', () => {
+    const run: Run = { ...makeRun(plane(0.3), line), features: [{ type: 'largeJump', at: 300 }] };
+    for (const d of [300, 312, 324]) expect(Math.abs(skiingPose(skierOn(run, 0, d), [run], 1)!.pos.x - 500)).toBeGreaterThan(6);
+  });
+
+  it('swings up each berm wall in turn', () => {
+    const run: Run = { ...makeRun(plane(0.3), line), features: [{ type: 'berms', at: 300 }] };
+    const side = (d: number) => skiingPose(skierOn(run, 1, d), [run], 1)!.pos.x - 500;
+    expect(Math.abs(side(305))).toBeGreaterThan(6);
+    expect(Math.sign(side(305))).toBe(-Math.sign(side(315)));
+    expect(Math.sign(side(305))).toBe(Math.sign(side(325)));
+  });
+
+  it('pops off rollers when strong, soaks them up when not', () => {
+    const run: Run = { ...makeRun(plane(0.3), line), features: [{ type: 'rollers', at: 300 }] };
+    expect(skiingPose(skierOn(run, 2, 304), [run], 1)!.air).toBeGreaterThan(0.2);
+    expect(skiingPose(skierOn(run, 0, 303), [run], 1)!.stance).toBe('tuck');
+  });
+
+  it('disappears inside a tunnel, unless skiing around it', () => {
+    const run: Run = { ...makeRun(plane(0.3), line), features: [{ type: 'tunnel', at: 300 }] };
+    expect(skiingPose(skierOn(run, 0, 306), [run], 1)!.hidden).toBe(true);
+    expect(skiingPose(skierOn(run, 0, 290), [run], 1)!.hidden).toBe(false);
+    // Pros don't care for the tunnel and ski past it.
+    expect(skiingPose(skierOn(run, 3, 306), [run], 1)!.hidden).toBe(false);
+  });
+
   it('is only for skiers on a run', () => {
     const run = makeRun(plane(0.3), line);
     const s = skierOn(run, 1, 50);

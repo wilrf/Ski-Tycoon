@@ -12,6 +12,7 @@ import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
+import { drawFeature } from './featureArt';
 import { airborne, drawPuffs, drawTrail, stampSkier, type Pose } from './skierArt';
 import { skiingPose, snowPuffs, trailPoses, type Stance } from './skierMotion';
 import { stampPine, type TerrainArt } from './terrainArt';
@@ -326,6 +327,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     lift.queue.forEach((id, i) => inLine.set(id, slots[i]!));
   }
 
+  for (const run of resort.runs) for (const ft of run.features) drawFeature(ctx, run, ft.type, ft.at, at, camera.zoom, 'ground');
   if (camera.zoom >= SPRAY_ZOOM) drawTrails(ctx, shown, f, at);
 
   for (const s of shown) {
@@ -336,6 +338,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     const pos = skiing?.pos ?? queued?.pos ?? (prev ? lerp(prev, s.pos, f.alpha) : s.pos);
     const p = at(pos);
     if (p.x < -20 || p.y < -20 || p.x > view.width + 20 || p.y > view.height + 20) continue;
+    if (skiing?.hidden) continue;
     const placed = skiing ?? queued;
     if (placed) headings.set(s.id, placed.heading);
     else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
@@ -345,6 +348,8 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
     else stampSkier(ctx, p, heading, u, jacket, skiing ? stancePose(skiing.stance) : placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
   }
+  // Tunnel roofs go over the skiers passing through them.
+  for (const run of resort.runs) for (const ft of run.features) drawFeature(ctx, run, ft.type, ft.at, at, camera.zoom, 'roof');
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
     const here = new Set(resort.skiers.map((s) => s.id));
