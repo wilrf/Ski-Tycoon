@@ -94,7 +94,10 @@ export const CONFIG = {
     /** A 7-hour ski day takes about 4 real minutes at 1×. */
     ticksPerSecond: 35,
     gameSecondsPerTick: 3,
-    speeds: [0, 1, 2, 4, 8],
+    /** Game-speed multipliers for pause, 1×, 2×, 4× and 6×. 8× made skiers too frantic to watch. */
+    speeds: [0, 1, 2, 4, 6],
+    /** At each speed, draw one skier in this many, so fast-forward isn't a swarm. */
+    drawEvery: [1, 1, 1, 2, 3],
     maxTicksPerFrame: 80,
   },
   terrain: {

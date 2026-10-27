@@ -241,7 +241,7 @@ function frame(now: number): void {
     if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
     tick(world).forEach(onEvent);
   }
-  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks };
+  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex };
   draw(ctx, frameState);
   drawOverlay(ctx, frameState);
   refreshHud(world, speedIndex);
