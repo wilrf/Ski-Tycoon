@@ -75,6 +75,13 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
     spray(puffs, poseAt(s, run, d - back, scared).pos, angle, 0.6, SPRAY_COUNT[s.skill], size, back / SPRAY_FADE, s.id * 131 + turn);
   }
 
+  // The hockey stop at the bottom throws a growing fan of snow ahead, downhill of the sideways skis.
+  const stop = stopping(run, d);
+  if (stop > 0) {
+    const { t } = frameAt(run, d);
+    spray(puffs, poseAt(s, run, d, scared).pos, Math.atan2(t.y, t.x), 0.9, 10, 1.4 * stop, 0.35, s.id * 389 + run.id);
+  }
+
   // A ring of snow where a skier lands a jump.
   for (const f of run.features) {
     const jump = JUMPS[f.type];
@@ -141,9 +148,11 @@ const turnPhase = (s: Skier): number => (s.id * 2.399) % (Math.PI * 2);
 
 /** Direction of travel down the run line at `d`, and the normal to its left. */
 function frameAt(run: Run, d: number): { here: Vec2; t: Vec2; n: Vec2 } {
-  const here = pointAlong(run.points, d), ahead = pointAlong(run.points, Math.min(run.profile.length, d + 1));
-  const len = Math.hypot(ahead.x - here.x, ahead.y - here.y) || 1;
-  const t = vec((ahead.x - here.x) / len, (ahead.y - here.y) / len);
+  // Measured over the metre ahead, or the last metre at the very bottom of the run.
+  const from = Math.max(0, Math.min(d, run.profile.length - 1));
+  const here = pointAlong(run.points, d), a = pointAlong(run.points, from), b = pointAlong(run.points, Math.min(run.profile.length, from + 1));
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const t = vec((b.x - a.x) / len, (b.y - a.y) / len);
   return { here, t, n: vec(-t.y, t.x) };
 }
 
@@ -169,20 +178,29 @@ const warp = (s: Skier, theta: number): number => theta + (RHYTHM[s.skill] / 2) 
 
 /** How far to the side of the run line the skier is at `d`, in metres. */
 function sideAt(s: Skier, run: Run, d: number, scared: boolean): number {
-  const width = TURN_WIDTH[s.skill] * jumpAt(s, run, d).straighten * (scared ? 1.3 : 1);
-  return Math.sin(warp(s, d * turnRate(s) + turnPhase(s))) * width;
+  return Math.sin(warp(s, d * turnRate(s) + turnPhase(s))) * widthAt(s, run, d, scared);
 }
 
 function poseAt(s: Skier, run: Run, d: number, scared: boolean): SkierPose {
-  const { straighten, air } = jumpAt(s, run, d);
   const { here, t, n } = frameAt(run, d);
   const k = turnRate(s), theta = d * k + turnPhase(s), a = RHYTHM[s.skill];
-  const width = TURN_WIDTH[s.skill] * straighten * (scared ? 1.3 : 1);
+  const width = widthAt(s, run, d, scared);
   const psi = warp(s, theta);
   const side = Math.sin(psi) * width, drift = Math.cos(psi) * width * k * (1 + a * Math.cos(2 * theta));
+  // Into the stop, the skis swing across the hill, to the left or right as each skier prefers.
+  const stop = stopping(run, d), swing = (s.id % 2 === 0 ? 1 : -1) * (Math.PI / 2) * stop * stop * (3 - 2 * stop);
   return {
     pos: vec(here.x + n.x * side, here.y + n.y * side),
-    heading: Math.atan2(t.y + n.y * drift, t.x + n.x * drift),
-    air,
+    heading: Math.atan2(t.y + n.y * drift, t.x + n.x * drift) + swing,
+    air: jumpAt(s, run, d).air,
   };
 }
+
+/** Skiers finish a run with a hockey stop over this many metres: skis swung sideways, snow sprayed ahead. */
+const STOP_LENGTH = 6;
+/** 0 until the last few metres of a run, rising to 1 at the bottom. */
+const stopping = (run: Run, d: number): number => Math.max(0, 1 - (run.profile.length - d) / STOP_LENGTH);
+
+/** How wide the skier is swinging at `d`: narrower running at a jump, and straightening out into the stop. */
+const widthAt = (s: Skier, run: Run, d: number, scared: boolean): number =>
+  TURN_WIDTH[s.skill] * jumpAt(s, run, d).straighten * (scared ? 1.3 : 1) * (1 - stopping(run, d));
