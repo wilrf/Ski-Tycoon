@@ -11,8 +11,11 @@ const TEXTURE_ZOOM = 0.9;
 
 /** Where a run's decoration sits, in world metres. Built once per run and reused every frame. */
 interface RunDecor {
+  /** Fresh grooming, which fades as the run gets skied. */
+  readonly corduroy: readonly (readonly Vec2[])[];
+  /** Ski tracks and moguls, in the order they appear as skiers wear the run in. */
   readonly tracks: readonly (readonly Vec2[])[];
-  readonly moguls: readonly Vec2[];
+  readonly moguls: readonly { readonly p: Vec2; readonly appearsAt: number }[];
   readonly poles: readonly Vec2[];
   readonly min: Vec2;
   readonly max: Vec2;
@@ -52,8 +55,9 @@ const hash = (i: number, j: number): number => {
 };
 
 /**
- * Each grade has its own snow, so runs read apart even without colour: greens are smooth corduroy with a
- * couple of lazy turns, blues are carved S-tracks, and blacks are mogul fields (denser on double blacks).
+ * Every run starts the day freshly groomed. As it gets skied, each grade wears in its own way, so runs read
+ * apart even without colour: greens get a couple of lazy turns, blues carved S-tracks, and blacks build up
+ * mogul fields (denser on double blacks).
  */
 function decorate(points: readonly Vec2[], level: Level): RunDecor {
   const fine = sample(points, 2);
@@ -62,19 +66,18 @@ function decorate(points: readonly Vec2[], level: Level): RunDecor {
       const centre = count === 1 ? 0 : (k / (count - 1) - 0.5) * HALF * 0.6;
       return fine.map((s) => offset(s, centre + Math.sin(s.d / wave(k) + k * 1.9) * amplitude));
     });
-  const corduroy = (): Vec2[][] =>
-    Array.from({ length: 9 }, (_, k) => fine.map((s) => offset(s, (k / 8 - 0.5) * RUN_WIDTH * 0.85)));
+  const corduroy = Array.from({ length: 9 }, (_, k) => fine.map((s) => offset(s, (k / 8 - 0.5) * RUN_WIDTH * 0.85)));
 
   let tracks: Vec2[][] = [];
-  const moguls: Vec2[] = [];
-  if (level === 0) tracks = [...corduroy(), ...wavy(2, 4, (k) => 9 + k * 2)];
+  const moguls: { p: Vec2; appearsAt: number }[] = [];
+  if (level === 0) tracks = wavy(2, 4, (k) => 9 + k * 2);
   else if (level === 1) tracks = wavy(6, HALF * 0.55, (k) => 5 + k * 1.3);
   else {
     const rowGap = level === 3 ? 3.4 : 4.5;
     for (const [i, s] of sample(points, rowGap).entries()) {
       for (let j = -2; j <= 2; j++) {
         const across = (j + (i % 2) * 0.5) * (HALF * 0.38) + (hash(i, j) - 0.5) * 1.5;
-        if (Math.abs(across) < HALF - 2) moguls.push(offset(s, across));
+        if (Math.abs(across) < HALF - 2) moguls.push({ p: offset(s, across), appearsAt: hash(j, i) });
       }
     }
     tracks = wavy(2, HALF * 0.5, (k) => 3 + k);
@@ -84,6 +87,7 @@ function decorate(points: readonly Vec2[], level: Level): RunDecor {
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const pad = HALF + 4;
   return {
+    corduroy,
     tracks,
     moguls,
     poles,
@@ -110,10 +114,11 @@ export interface RunView {
 }
 
 /**
- * A run as it looks from above: a groomed swath with a faint edge, its snow texture, and piste poles in
- * its difficulty colour down both sides, which are what mark the grade. The texture drops away zoomed out.
+ * A run as it looks from above: a swath with a faint edge, its snow (fresh corduroy wearing into tracks or
+ * moguls as `wear` goes from 0 to 1), and piste poles in its difficulty colour down both sides, which mark
+ * the grade. The texture drops away zoomed out.
  */
-export function drawRun(ctx: CanvasRenderingContext2D, points: readonly Vec2[], level: Level, outline: string | null, v: RunView): void {
+export function drawRun(ctx: CanvasRenderingContext2D, points: readonly Vec2[], level: Level, outline: string | null, v: RunView, wear = 0): void {
   const color = LEVEL_COLORS[level];
   const width = Math.max(6, RUN_WIDTH * v.zoom);
   // Every mark of a kind goes into one path and one fill or stroke: thousands of tiny draw calls cost more than the pixels.
@@ -144,16 +149,25 @@ export function drawRun(ctx: CanvasRenderingContext2D, points: readonly Vec2[], 
   if (d.max.x < v.min.x || d.min.x > v.max.x || d.max.y < v.min.y || d.min.y > v.max.y) return;
 
   if (v.zoom >= TEXTURE_ZOOM) {
-    ctx.beginPath();
-    d.tracks.forEach(trace);
-    stroke(level === 0 ? 'rgba(150, 168, 205, 0.22)' : 'rgba(105, 125, 175, 0.42)', Math.max(0.8, v.zoom * 0.45));
-    if (d.moguls.length > 0) {
+    if (wear < 1) {
+      ctx.beginPath();
+      d.corduroy.forEach(trace);
+      stroke(`rgba(150, 168, 205, ${(0.26 * (1 - wear)).toFixed(3)})`, Math.max(0.8, v.zoom * 0.45));
+    }
+    const tracks = d.tracks.slice(0, Math.ceil(wear * d.tracks.length));
+    if (tracks.length > 0) {
+      ctx.beginPath();
+      tracks.forEach(trace);
+      stroke(level === 0 ? 'rgba(130, 150, 195, 0.35)' : 'rgba(105, 125, 175, 0.42)', Math.max(0.8, v.zoom * 0.45));
+    }
+    const moguls = d.moguls.filter((m) => m.appearsAt < wear);
+    if (moguls.length > 0) {
       // Sun from the north-west: a shadowed south-east flank under a bright north-west cap.
       const r = (level === 3 ? 1.9 : 1.6) * v.zoom;
       const bumps = (dx: number, rx: number, ry: number): void => {
         ctx.beginPath();
-        for (const m of d.moguls) {
-          const s = v.at(m), x = s.x + dx * r, y = s.y + dx * r;
+        for (const m of moguls) {
+          const s = v.at(m.p), x = s.x + dx * r, y = s.y + dx * r;
           ctx.moveTo(x + rx * r, y);
           ctx.ellipse(x, y, rx * r, ry * r, 0.6, 0, Math.PI * 2);
         }
