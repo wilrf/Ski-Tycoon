@@ -19,11 +19,11 @@ const el = (tag: string, className = '', text = ''): HTMLElement => {
 const HELP: readonly (readonly [string, string])[] = [
   ['Open the mountain', 'Build a lift that starts in the flat base area at the bottom. Skiers only come once one does.'],
   ['Draw runs', 'Pick Run and drag down the mountain from a lift’s top station or from another run. The slope colours show how steep each spot is (green, blue, black, red for double black). The end snaps to a lift, the base or another run, and the run opens when you let go.'],
-  ['Watch your skiers', 'Tap a skier to see how they feel and why, or open Resort to see what everyone is saying today. Each evening the day report pauses the game, lists the top complaints and takes you straight to the fix.'],
+  ['Watch your skiers', 'Tap a skier to see how they feel and why (tap the top or bottom of a run or lift to open the run or lift itself), or open Resort to see what everyone is saying today. Each evening the day report pauses the game, lists the top complaints and takes you straight to the fix.'],
   ['Grow', 'Happy skiers come back, and beginners who enjoy your greens move up a level. Every few days a magazine rates you. Stars pay a bonus and unlock lifts, upgrades, huts and land further up the mountain.'],
   ['Earn', 'Set the ticket price in Resort: higher brings fewer, grumpier skiers. Lodges and huts sell lunch. Requests pay a bonus if you meet them in time.'],
   ['Weather', 'Check tomorrow’s forecast in the day report. Powder days pull in experts, and storms stop exposed lifts high on the mountain.'],
-  ['Keys', 'P (or Space) play and pause, 1–4 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, O resort, U upgrade, M menu, Esc cancel.'],
+  ['Keys', 'P (or Space) play and pause, 1–3 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, O resort, U upgrade, M menu, Esc cancel.'],
 ];
 
 export interface ReportHandlers {

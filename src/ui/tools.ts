@@ -59,19 +59,26 @@ export function runStartsConnected(world: World, start: Vec2 | undefined): boole
   return !!start && (resort.lifts.some((l) => dist(l.top, start) <= CONFIG.network.connectRadius) || runAt(resort, start) !== null);
 }
 
-/** The nearest skier, lift, building or run within `radius` metres, in that order of priority. */
+/**
+ * What a tap at p picks. Buildings first. On a run or lift, the ends (where the trail sign or station
+ * would be) pick the run or lift itself, and the stretch in between picks the nearest skier on it, so
+ * busy runs don't swallow taps meant for skiers.
+ */
 function hitTest(world: World, p: Vec2, radius: number): Selection {
   const resort = activeResort(world);
-  const nearest = <T>(items: readonly T[], distance: (item: T) => number): T | undefined =>
-    items.reduce<{ item?: T; d: number }>((best, item) => (distance(item) < best.d ? { item, d: distance(item) } : best), { d: radius }).item;
-  const skier = nearest(resort.skiers, (s) => dist(s.pos, p));
-  if (skier) return { kind: 'skier', id: skier.id };
+  const nearest = <T>(items: readonly T[], distance: (item: T) => number, within = radius): T | undefined =>
+    items.reduce<{ item?: T; d: number }>((best, item) => (distance(item) < best.d ? { item, d: distance(item) } : best), { d: within }).item;
   const building = nearest(resort.buildings, (b) => dist(b.pos, p) - 8);
   if (building) return { kind: 'building', id: building.id };
   const lift = nearest(resort.lifts, (l) => distToSegment(p, l.bottom, l.top));
-  if (lift) return { kind: 'lift', id: lift.id };
-  const run = nearest(resort.runs, (r) => distToPolyline(p, r.points));
-  return run ? { kind: 'run', id: run.id } : null;
+  const run = lift ? undefined : nearest(resort.runs, (r) => distToPolyline(p, r.points));
+  const ends = lift ? [lift.bottom, lift.top] : run ? [run.points[0]!, run.points[run.points.length - 1]!] : [];
+  const atEnd = ends.some((e) => dist(e, p) <= Math.max(radius * 2.5, CONFIG.ui.endTapMetres));
+  const track: Selection = lift ? { kind: 'lift', id: lift.id } : run ? { kind: 'run', id: run.id } : null;
+  if (track && atEnd) return track;
+  // Mid-run, a skier a little further off still beats the run under the finger.
+  const skier = nearest(resort.skiers, (s) => dist(s.pos, p), track ? radius * 2 : radius);
+  return skier ? { kind: 'skier', id: skier.id } : track;
 }
 
 /** Appends p to the run being drawn if it's downhill of the last point; the first point snaps onto the network. */

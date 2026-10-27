@@ -58,7 +58,6 @@
 
 #panel dl dt { overflow-wrap: anywhere; }
 
-.stat.income b { color: #7ee2a8; }
 button.stat.rating { min-height: 28px; padding: 2px 10px; color: var(--accent); font-weight: 900; }
 #hint { cursor: pointer; }
 .emoji-tool { font-size: 18px; }

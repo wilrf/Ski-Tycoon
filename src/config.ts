@@ -94,10 +94,10 @@ export const CONFIG = {
     /** A 7-hour ski day takes about 4 real minutes at 1×. */
     ticksPerSecond: 35,
     gameSecondsPerTick: 3,
-    /** Game-speed multipliers for pause, 1×, 2×, 4× and 6×. 8× made skiers too frantic to watch. */
-    speeds: [0, 1, 2, 4, 6],
+    /** Game-speed multipliers for pause, 1×, 3× and 6×. 8× made skiers too frantic to watch. */
+    speeds: [0, 1, 3, 6],
     /** At each speed, draw one skier in this many, so fast-forward isn't a swarm. */
-    drawEvery: [1, 1, 1, 2, 3],
+    drawEvery: [1, 1, 2, 3],
     maxTicksPerFrame: 80,
   },
   terrain: {
@@ -257,6 +257,10 @@ export const CONFIG = {
     { name: 'Mid mountain', fromY: 0.28, cost: 250_000, stars: 2 },
     { name: 'Summit bowl', fromY: 0, cost: 600_000, stars: 4 },
   ],
+  ui: {
+    /** Taps this close to either end of a run or lift pick the run or lift; in between they pick skiers. */
+    endTapMetres: 40,
+  },
   review: {
     everyDays: 3,
     magazine: 'Powder Line',

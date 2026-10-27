@@ -13,7 +13,6 @@ const BINDINGS: Readonly<Record<string, KeyCommand>> = {
   '1': { type: 'speed', index: 1 },
   '2': { type: 'speed', index: 2 },
   '3': { type: 'speed', index: 3 },
-  '4': { type: 'speed', index: 4 },
   m: { type: 'menu' },
   p: { type: 'togglePause' },
   o: { type: 'action', action: 'resort' },

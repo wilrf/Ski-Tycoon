@@ -1,5 +1,4 @@
 import { CONFIG } from '../config';
-import { income } from '../sim/economy';
 import { liftsFrom } from '../sim/network';
 import { activeResort, isApres, isClosed, type World } from '../sim/world';
 import { clock, money, percent, requestTitle } from './format';
@@ -27,7 +26,7 @@ const byId = (id: string): HTMLElement => document.getElementById(id)!;
 export function createHud(h: HudHandlers): (world: World, speedIndex: number) => void {
   const fields = {
     day: byId('hud-day'), time: byId('hud-time'), money: byId('hud-money'), skiers: byId('hud-skiers'), happiness: byId('hud-happiness'),
-    income: byId('hud-income'), weather: byId('hud-weather'), rating: byId('hud-rating'), hint: byId('hint'),
+    weather: byId('hud-weather'), rating: byId('hud-rating'), hint: byId('hint'),
   };
   fields.rating.addEventListener('click', () => h.resort());
   fields.hint.addEventListener('click', () => h.resort());
@@ -49,7 +48,6 @@ export function createHud(h: HudHandlers): (world: World, speedIndex: number) =>
     set(fields.money, money(world.company.money));
     set(fields.skiers, String(skiers.length));
     set(fields.happiness, skiers.length ? percent(skiers.reduce((sum, s) => sum + s.happiness, 0) / skiers.length) : '–');
-    set(fields.income, `+${money(income(world.company.today))} today`);
     const weather = CONFIG.weather.kinds;
     set(fields.weather, `${weather[world.weather.today].emoji} → ${weather[world.weather.tomorrow].emoji}`);
     set(fields.rating, world.company.stars > 0 ? `${'★'.repeat(world.company.stars)} Resort` : '☆ Resort');
