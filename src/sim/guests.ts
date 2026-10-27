@@ -50,7 +50,7 @@ export function regularsComing(guests: readonly Guest[], rng: Rng, demand: numbe
 export function recordVisit(g: Guest, s: Skier, happy: boolean): boolean {
   const { progressPerRun, progressPerStretch } = CONFIG.guests;
   g.visits++;
-  g.loyalty = clamp(g.loyalty + (s.happiness - 55) * 0.5 + (happy ? 5 : -15), 0, 100);
+  g.loyalty = clamp(g.loyalty + (s.happiness - 55) * 0.5 + (happy ? 5 : -15) + s.apresLoyalty, 0, 100);
   // Nobody moves up in a single day, however much they ski.
   g.progress += Math.min(CONFIG.guests.maxProgressPerVisit, s.practice * progressPerRun + s.stretches * progressPerStretch);
   g.movedUp = g.progress >= 1 && g.skill < 3;

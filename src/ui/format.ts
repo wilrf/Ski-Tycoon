@@ -25,6 +25,7 @@ export function thoughtText(t: Thought): string {
     case 'movedUp': return `I’ve moved up: I’m ${SKILL_NAMES[t.skill].toLowerCase()} now!`;
     case 'boredRun': return `${t.run} is too easy for me.`;
     case 'eating': return `Heading into ${t.place} for something to eat.`;
+    case 'apres': return `Lifts are closed. Drinks at ${t.place}!`;
     case 'longLine': return `The line for ${t.lift} is huge.`;
     case 'riding': return `Nice view from ${t.lift}.`;
     case 'enjoying': return `Here we go down ${t.run}!`;
@@ -51,13 +52,15 @@ export function activityText(s: Skier, resort: Resort): string {
     case 'skiing': return `Skiing ${resort.runs.find((r) => r.id === state.runId)?.name ?? 'off-piste'}`;
     case 'toBuilding': return `Walking to ${resort.buildings.find((b) => b.id === state.buildingId)?.name ?? 'lunch'}`;
     case 'eating': return `Eating at ${resort.buildings.find((b) => b.id === state.buildingId)?.name ?? 'the lodge'}`;
+    case 'toBar': return `Skiing down to ${resort.buildings.find((b) => b.id === state.buildingId)?.name ?? 'the lodge'} for après`;
+    case 'apres': return `Après at ${resort.buildings.find((b) => b.id === state.buildingId)?.name ?? 'the lodge'}`;
     case 'leaving': return 'Heading home';
   }
 }
 
 export const FEELING_EMOJI: Record<FeelingKind, string> = {
   greatRun: '😍', goodRun: '🙂', boredRun: '😒', crowdedRun: '😣', scared: '😱', longLine: '😤', nothingForMe: '😞', noLift: '😞',
-  overpriced: '💸', bargain: '🤑', tiringTow: '😮‍💨', comfyRide: '😌', goodMeal: '🍲', lodgeFull: '🍽️', windHold: '🌬️', movedUp: '🎉',
+  overpriced: '💸', bargain: '🤑', tiringTow: '😮‍💨', comfyRide: '😌', goodMeal: '🍲', lodgeFull: '🍽️', windHold: '🌬️', movedUp: '🎉', greatApres: '🍻',
 };
 
 /** One line on why happiness changed, from the skier's point of view. */
@@ -79,6 +82,7 @@ export function feelingText(kind: FeelingKind, place: string): string {
     case 'lodgeFull': return `${place} was full`;
     case 'windHold': return `${place} was stopped by wind`;
     case 'movedUp': return 'Moved up a level';
+    case 'greatApres': return `Great après at ${place}`;
   }
 }
 
@@ -89,6 +93,7 @@ export function tallyText(kind: FeelingKind, count: number): string {
     scared: 'Run too hard', longLine: 'Long line', nothingForMe: 'Nothing to ski off a lift', noLift: 'No lift to take',
     overpriced: 'Ticket too pricey', bargain: 'Ticket a bargain', tiringTow: 'Worn out on a long tow', comfyRide: 'Cozy covered lift',
     goodMeal: 'Good meal', lodgeFull: 'Lodge full', windHold: 'Lift on wind hold', movedUp: 'Came back a level better',
+    greatApres: 'Great après',
   };
   return `${label[kind]} ×${count.toLocaleString('en-US')}`;
 }
@@ -112,6 +117,7 @@ export function quoteText(q: Quote): string {
     lodgeFull: `${q.place} was packed and I couldn’t get a seat.`,
     windHold: `The wind shut ${q.place} and my day with it.`,
     movedUp: 'I learned so much here, I’ve moved up a level!',
+    greatApres: `The après at ${q.place} is the best way to end a ski day.`,
   };
   return `“${said[q.kind]}” — ${q.name}, ${SKILL_NAMES[q.skill].toLowerCase()}`;
 }

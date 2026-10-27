@@ -4,6 +4,8 @@ import { CONFIG } from '../config';
 export interface Ledger {
   tickets: number;
   food: number;
+  /** Après drinks after the lifts close. */
+  apres: number;
   bonuses: number;
   construction: number;
   refunds: number;
@@ -19,9 +21,9 @@ export interface Company {
   stars: number;
 }
 
-export const emptyLedger = (): Ledger => ({ tickets: 0, food: 0, bonuses: 0, construction: 0, refunds: 0, upkeep: 0 });
+export const emptyLedger = (): Ledger => ({ tickets: 0, food: 0, apres: 0, bonuses: 0, construction: 0, refunds: 0, upkeep: 0 });
 
-export const income = (l: Ledger): number => l.tickets + l.food + l.bonuses;
+export const income = (l: Ledger): number => l.tickets + l.food + l.apres + l.bonuses;
 
 export const createCompany = (name: string): Company => ({ name, money: CONFIG.economy.startingCash, today: emptyLedger(), stars: 0 });
 
@@ -45,7 +47,7 @@ export function refund(company: Company, cost: number): void {
   company.today.refunds += amount;
 }
 
-export function earn(company: Company, kind: 'tickets' | 'food' | 'bonuses', amount: number): void {
+export function earn(company: Company, kind: 'tickets' | 'food' | 'apres' | 'bonuses', amount: number): void {
   company.money += amount;
   company.today[kind] += amount;
 }

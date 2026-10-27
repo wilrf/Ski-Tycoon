@@ -49,6 +49,24 @@ export interface WeatherSpec {
 
 export type BuildingType = 'lodge' | 'hut';
 
+export type ApresPrice = 'low' | 'medium' | 'high';
+
+export interface ApresTier {
+  readonly label: string;
+  readonly drinkPrice: number;
+  /** Multiplies the share of skiers who stay for après. */
+  readonly stay: number;
+  /** Added to each après guest's loyalty. */
+  readonly loyalty: number;
+}
+
+/** An extension built onto a base lodge, adding seats for lunch and après. */
+export interface LodgeUpgrade {
+  readonly name: string;
+  readonly cost: number;
+  readonly seats: number;
+}
+
 export interface BuildingSpec {
   readonly label: string;
   readonly cost: number;
@@ -165,6 +183,37 @@ export const CONFIG = {
     /** A hut must sit this close to a lift's top station. */
     hutReach: 60,
   },
+  /**
+   * After the lifts close, some skiers head to a base lodge for drinks. Real après runs from lift close
+   * until about 8 PM (the Mooserwirt in St. Anton shuts around then); about 31% of Aspen visitors take part.
+   */
+  apres: {
+    /** Bars start pouring for skiers who are done for the day at 2:30 PM, like Cloud Nine and La Folie Douce. */
+    openHour: 14.5,
+    lastCallHour: 19.5,
+    closeHour: 20,
+    /**
+     * Chance that a skier finishing their day after the bar opens stays, at the medium price and a typical mood.
+     * Many skiers tire and leave earlier, so this comes out at about 30% of the day's skiers, as at Aspen.
+     */
+    stayShare: 0.7,
+    /** Happiness at which the share is exactly stayShare; happier skiers stay more, grumpier ones less. */
+    typicalHappiness: 70,
+    staySeconds: [2700, 7200],
+    drinks: [1, 3],
+    joy: 4,
+    /** Low pulls more guests and loyalty; high earns more a drink but puts 22% off (Sunweb survey). */
+    prices: {
+      low: { label: 'Low', drinkPrice: 5, stay: 1.25, loyalty: 2 },
+      medium: { label: 'Medium', drinkPrice: 8, stay: 1, loyalty: 1 },
+      high: { label: 'High', drinkPrice: 12, stay: 0.78, loyalty: -1 },
+    } satisfies Record<ApresPrice, ApresTier>,
+  },
+  /** A base lodge grows in place, in this order. */
+  lodgeUpgrades: [
+    { name: 'Sun deck', cost: 40_000, seats: 80 },
+    { name: 'Après bar wing', cost: 90_000, seats: 100 },
+  ] satisfies readonly LodgeUpgrade[],
   liftRules: {
     minLength: 40,
     minRise: 5,

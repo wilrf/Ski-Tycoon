@@ -1,9 +1,9 @@
-import { CONFIG, type Level } from '../config';
-import { buildingsNear, type Building } from './buildings';
+import { CONFIG, type ApresTier, type Level } from '../config';
+import { buildingsNear, seatsOf, type Building } from './buildings';
 import { clamp, dist, lerp, pointAlong, type Vec2 } from './geometry';
 import { liftTier, rideSeconds, waitSeconds, type Lift } from './lifts';
 import { branchesOf, leadsSomewhere, liftsFrom, mergeOf, runsFromLift, type Mountain } from './network';
-import { nextFloat, pickWeighted, type Rng } from './rng';
+import { nextFloat, nextRange, pickWeighted, type Rng } from './rng';
 import { favouriteFeature, featureFun, funFor, rateRun, type Run } from './runs';
 
 export type SkillLevel = Level;
@@ -23,6 +23,7 @@ export type Thought =
   | { readonly kind: 'survivedRun'; readonly run: string }
   | { readonly kind: 'noRunForMe'; readonly lift: string }
   | { readonly kind: 'eating'; readonly place: string }
+  | { readonly kind: 'apres'; readonly place: string }
   | { readonly kind: 'nothingToSki' }
   | { readonly kind: 'tired' }
   | { readonly kind: 'fedUp' }
@@ -31,7 +32,7 @@ export type Thought =
 /** Why a skier's happiness changed. Each kind has an emoji and a line of text in the UI. */
 export type FeelingKind =
   | 'greatRun' | 'goodRun' | 'boredRun' | 'crowdedRun' | 'scared' | 'longLine' | 'nothingForMe' | 'noLift'
-  | 'overpriced' | 'bargain' | 'tiringTow' | 'comfyRide' | 'goodMeal' | 'lodgeFull' | 'windHold' | 'movedUp';
+  | 'overpriced' | 'bargain' | 'tiringTow' | 'comfyRide' | 'goodMeal' | 'lodgeFull' | 'windHold' | 'movedUp' | 'greatApres';
 
 export interface Feeling {
   readonly kind: FeelingKind;
@@ -65,6 +66,9 @@ export type SkierState =
   | { readonly kind: 'skiing'; readonly runId: number; readonly scared: boolean; distance: number }
   | { readonly kind: 'toBuilding'; readonly buildingId: number }
   | { readonly kind: 'eating'; readonly buildingId: number; left: number }
+  /** After close: heading down to a lodge for après, then sitting in its bar. */
+  | { readonly kind: 'toBar'; readonly buildingId: number }
+  | { readonly kind: 'apres'; readonly buildingId: number; left: number }
   | { readonly kind: 'leaving'; readonly happy: boolean };
 
 export interface Skier {
@@ -91,6 +95,8 @@ export interface Skier {
   practice: number;
   stretches: number;
   ate: boolean;
+  /** Loyalty this skier's après adds when they go home; 0 if they skipped it. */
+  apresLoyalty: number;
 }
 
 export interface SkierContext {
@@ -111,8 +117,12 @@ export interface SkierContext {
   /** Seconds since midnight. */
   readonly time: number;
   readonly journal: Journal;
-  /** Called when a skier pays for something on the mountain. */
-  readonly spend: (amount: number) => void;
+  /** Tonight's après prices. */
+  readonly apresPrice: ApresTier;
+  /** Called when a skier pays for a meal or for après drinks. */
+  readonly spend: (amount: number, what: 'meal' | 'apres') => void;
+  /** Called when a skier wanted après but every lodge was full. */
+  readonly turnedAway: () => void;
 }
 
 export interface NewSkier {
@@ -137,6 +147,7 @@ export const createSkier = (n: NewSkier): Skier => ({
   practice: 0,
   stretches: 0,
   ate: false,
+  apresLoyalty: 0,
 });
 
 /**
@@ -202,7 +213,7 @@ function goEat(ctx: SkierContext, s: Skier): boolean {
   if (ctx.closed || !isHungry(ctx, s)) return false;
   const near = buildingsNear(ctx.mountain, ctx.buildings, s.pos);
   if (near.length === 0) return false;
-  const open = near.find((b) => (ctx.occupancy.get(b.id) ?? 0) < CONFIG.buildings[b.type].seats);
+  const open = near.find((b) => (ctx.occupancy.get(b.id) ?? 0) < seatsOf(b));
   if (!open) {
     feel(ctx.journal, ctx.time, s, 'lodgeFull', -CONFIG.meals.fullPenalty, near[0]!.name);
     return false;
@@ -213,16 +224,57 @@ function goEat(ctx: SkierContext, s: Skier): boolean {
   return true;
 }
 
+/**
+ * At closing, or from 3 PM once they're too tired to ski on, a skier who had a decent day may head to a base
+ * lodge for après. Happier skiers are likelier to stay, grumpier ones less, and the price tier scales it. Returns whether they went.
+ */
+function goApres(ctx: SkierContext, s: Skier): boolean {
+  const { apres } = CONFIG;
+  if (ctx.time < apres.openHour * 3600 || ctx.time >= apres.lastCallHour * 3600 || s.cash < ctx.apresPrice.drinkPrice) return false;
+  const lodges = ctx.buildings.filter((b) => b.type === 'lodge');
+  if (lodges.length === 0) return false;
+  const chance = apres.stayShare * ctx.apresPrice.stay * clamp(s.happiness / apres.typicalHappiness, 0.5, 1.3);
+  if (nextFloat(ctx.rng) >= chance) return false;
+  const open = lodges.find((b) => (ctx.occupancy.get(b.id) ?? 0) < seatsOf(b));
+  if (!open) {
+    feel(ctx.journal, ctx.time, s, 'lodgeFull', -CONFIG.meals.fullPenalty, lodges[0]!.name);
+    ctx.turnedAway();
+    return false;
+  }
+  ctx.occupancy.set(open.id, (ctx.occupancy.get(open.id) ?? 0) + 1);
+  s.state = { kind: 'toBar', buildingId: open.id };
+  s.thought = { kind: 'apres', place: open.name };
+  return true;
+}
+
+/** Sits an après guest down: they buy their round up front and stay until they're done or the bar shuts. */
+function sitAtBar(ctx: SkierContext, s: Skier, building: Building): void {
+  const { apres } = CONFIG;
+  const price = ctx.apresPrice.drinkPrice;
+  const drinks = Math.min(Math.floor(s.cash / price), Math.round(nextRange(ctx.rng, apres.drinks)));
+  s.cash -= drinks * price;
+  ctx.spend(drinks * price, 'apres');
+  const left = Math.min(nextRange(ctx.rng, apres.staySeconds), apres.closeHour * 3600 - ctx.time);
+  s.state = { kind: 'apres', buildingId: building.id, left };
+}
+
 /** What a skier does at a junction: go home, eat, or head for a lift. */
 export function decide(ctx: SkierContext, s: Skier): void {
   const leave = (happy: boolean, thought: Thought): void => {
     s.state = { kind: 'leaving', happy };
     s.thought = thought;
   };
-  if (ctx.closed) return leave(s.happiness >= CONFIG.skiers.fedUpHappiness, { kind: 'closing' });
+  if (ctx.closed) {
+    const happy = s.happiness >= CONFIG.skiers.fedUpHappiness;
+    if (happy && goApres(ctx, s)) return;
+    return leave(happy, { kind: 'closing' });
+  }
   if (s.happiness < CONFIG.skiers.fedUpHappiness) return leave(false, { kind: 'fedUp' });
   if (goEat(ctx, s)) return;
-  if (s.energy < CONFIG.skiers.tiredEnergy) return leave(true, { kind: 'tired' });
+  if (s.energy < CONFIG.skiers.tiredEnergy) {
+    if (!goApres(ctx, s)) leave(true, { kind: 'tired' });
+    return;
+  }
   const lift = chooseLift(ctx, s);
   if (!lift) {
     const held = liftsFrom(ctx.mountain, s.pos).find((l) => ctx.held.has(l.id));
@@ -319,6 +371,20 @@ export function updateSkier(ctx: SkierContext, s: Skier, dt: number): boolean {
     }
     return true;
   }
+  if (state.kind === 'toBar' || state.kind === 'apres') {
+    const building = ctx.buildings.find((b) => b.id === state.buildingId);
+    // Everyone skis down to the base after close, so the walk to the bar goes at going-home speed.
+    if (!building) s.state = { kind: 'leaving', happy: s.happiness >= CONFIG.skiers.fedUpHappiness };
+    else if (state.kind === 'toBar') {
+      if (moveToward(s, building.pos, cfg.leaveSpeed * dt)) sitAtBar(ctx, s, building);
+    } else if ((state.left -= dt) <= 0) {
+      feel(ctx.journal, ctx.time, s, 'greatApres', CONFIG.apres.joy, building.name);
+      s.apresLoyalty = ctx.apresPrice.loyalty;
+      s.state = { kind: 'leaving', happy: s.happiness >= CONFIG.skiers.fedUpHappiness };
+      s.thought = { kind: 'closing' };
+    }
+    return true;
+  }
   if (state.kind === 'toBuilding' || state.kind === 'eating') {
     const building = ctx.buildings.find((b) => b.id === state.buildingId);
     if (!building) decide(ctx, s);
@@ -327,7 +393,7 @@ export function updateSkier(ctx: SkierContext, s: Skier, dt: number): boolean {
     } else if ((state.left -= dt) <= 0) {
       const price = Math.min(s.cash, CONFIG.buildings[building.type].mealPrice);
       s.cash -= price;
-      ctx.spend(price);
+      ctx.spend(price, 'meal');
       s.ate = true;
       s.energy = Math.min(100, s.energy + CONFIG.meals.energy);
       feel(ctx.journal, ctx.time, s, 'goodMeal', CONFIG.meals.joy, building.name);

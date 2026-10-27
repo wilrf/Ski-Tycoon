@@ -88,8 +88,11 @@ export function createMenus(onChoice: (choice: MenuChoice) => void): {
       const rows: [string, string][] = [
         ['Skiers', `${r.stats.arrivals} (${r.stats.regulars} regulars)`],
         ['Went home happy', `${happyShare}%`],
-        ['Income', `${money(income(r.ledger))} (tickets ${money(r.ledger.tickets)}, food ${money(r.ledger.food)}${r.ledger.bonuses ? `, bonuses ${money(r.ledger.bonuses)}` : ''})`],
+        ['Income', `${money(income(r.ledger))} (tickets ${money(r.ledger.tickets)}, food ${money(r.ledger.food)}${r.ledger.apres ? `, après ${money(r.ledger.apres)}` : ''}${r.ledger.bonuses ? `, bonuses ${money(r.ledger.bonuses)}` : ''})`],
         ...(r.ledger.upkeep ? [['Feature upkeep', money(r.ledger.upkeep)] as [string, string]] : []),
+        ...(r.stats.apresGuests || r.stats.apresTurnedAway
+          ? [['Après', `${r.stats.apresGuests} guests${r.stats.apresTurnedAway ? `, ${r.stats.apresTurnedAway} turned away for lack of seats` : ''}`] as [string, string]]
+          : []),
         ['Reputation', `${Math.round(r.reputation.before)}% → ${Math.round(r.reputation.after)}%`],
         ...(r.stats.movedUp ? [['Moved up a level', `${r.stats.movedUp} skiers`] as [string, string]] : []),
         ['Tomorrow', weatherText(r.forecast.today)],

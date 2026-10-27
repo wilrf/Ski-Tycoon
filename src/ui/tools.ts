@@ -1,4 +1,4 @@
-import { CONFIG, type BuildingType, type FeatureType, type LiftType } from '../config';
+import { CONFIG, type ApresPrice, type BuildingType, type FeatureType, type LiftType } from '../config';
 import { dist, distToPolyline, distToSegment, projectOnPolyline, type Vec2 } from '../sim/geometry';
 import type { LiftPlan } from '../sim/lifts';
 import { runAt } from '../sim/network';
@@ -25,7 +25,7 @@ export interface UiState {
 
 export type UiAction =
   | 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort'
-  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}`;
+  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice';
 
 export const createUiState = (): UiState => ({ tool: { kind: 'select' }, selection: null, hover: null, stroking: false });
 
@@ -196,6 +196,7 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
     case 'buyLand':
       return apply({ type: 'buyLand' }, 'Land bought. Build on it right away.');
     case 'upgrade':
+      if (selection?.kind === 'building') return apply({ type: 'upgradeLodge', id: selection.id }, 'Lodge extended: more seats for lunch and après.');
       return selection?.kind === 'lift' ? apply({ type: 'upgradeLift', id: selection.id }, 'Lift upgraded.') : null;
     case 'feature:rollers':
     case 'feature:berms':
@@ -205,6 +206,11 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
     case 'feature:largeJump':
       if (tool.kind === 'feature') ui.tool = { ...tool, featureType: action.slice('feature:'.length) as FeatureType };
       return null;
+    case 'apresPrice': {
+      // Cycles Low → Medium → High → Low.
+      const tiers = Object.keys(CONFIG.apres.prices) as ApresPrice[];
+      return apply({ type: 'setApresPrice', price: tiers[(tiers.indexOf(resort.apresPrice) + 1) % tiers.length]! });
+    }
     case 'remove': {
       if (!selection || selection.kind === 'skier' || selection.kind === 'resort') return null;
       const type = selection.kind === 'lift' ? 'removeLift' : selection.kind === 'run' ? 'removeRun' : 'removeBuilding';

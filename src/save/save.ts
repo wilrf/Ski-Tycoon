@@ -7,7 +7,7 @@ import type { Vec2 } from '../sim/geometry';
 import type { World } from '../sim/world';
 
 /** Bump this whenever the saved shape of World changes, and add a migration from the previous version. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'summit-tycoon/save';
 
 export interface SaveFile {
@@ -78,6 +78,29 @@ const MIGRATIONS: Readonly<Record<number, (save: VersionedData) => VersionedData
         resorts: resorts.map((r) => ({
           ...r,
           runs: (r['runs'] as Obj[]).map((run) => ({ ...run, profile: profileRun(r['terrain'] as Terrain, run['points'] as Vec2[]), features: [] })),
+        })),
+      },
+    };
+  },
+  // Version 4 added après: lodge extensions, the après price, and après lines in the ledger and the day's
+  // stats. Skiers mid-day get no après loyalty yet.
+  3: (save) => {
+    type Obj = Record<string, unknown>;
+    const w = save.world as Obj;
+    const company = w['company'] as Obj;
+    const resorts = w['resorts'] as Obj[];
+    return {
+      ...save,
+      version: 4,
+      world: {
+        ...w,
+        company: { ...company, today: { ...(company['today'] as Obj), apres: 0 } },
+        resorts: resorts.map((r) => ({
+          ...r,
+          buildings: (r['buildings'] as Obj[]).map((b) => ({ ...b, upgrades: 0 })),
+          skiers: (r['skiers'] as Obj[]).map((s) => ({ ...s, apresLoyalty: 0 })),
+          apresPrice: 'medium',
+          today: { ...(r['today'] as Obj), apresGuests: 0, apresTurnedAway: 0 },
         })),
       },
     };
