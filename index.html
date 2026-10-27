@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b2735" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Summit Tycoon</title>
+  </head>
+  <body>
+    <canvas id="map"></canvas>
+    <header id="hud">
+      <div class="stats">
+        <strong id="hud-day"></strong>
+        <span id="hud-time"></span>
+        <span id="hud-money" class="money"></span>
+        <span id="hud-skiers"></span>
+        <span id="hud-happiness"></span>
+      </div>
+      <div id="speed" class="segmented" aria-label="Game speed">
+        <button title="Pause (space)">❚❚</button><button title="Normal (1)">1×</button><button title="Fast (2)">2×</button><button title="Fastest (3)">4×</button>
+      </div>
+      <div id="menu" class="segmented">
+        <button data-menu="save">Save</button><button data-menu="load">Load</button><button data-menu="new">New</button>
+      </div>
+    </header>
+    <p id="hint" hidden></p>
+    <aside id="panel" hidden></aside>
+    <nav id="toolbar" aria-label="Build tools">
+      <button data-tool="select" title="Select (V)">👆<span>Select</span></button>
+      <button data-tool="ropeTow" title="Rope tow (T)">🪢<span>Tow</span></button>
+      <button data-tool="chairlift" title="Chairlift (C)">🚡<span>Chair</span></button>
+      <button data-tool="gondola" title="Gondola (G)">🚠<span>Gondola</span></button>
+      <button data-tool="run" title="Run (R)">⛷️<span>Run</span></button>
+    </nav>
+    <div id="toast" role="status"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
