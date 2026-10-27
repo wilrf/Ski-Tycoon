@@ -1,7 +1,7 @@
-import { CONFIG, type FeatureType } from '../config';
+import { CONFIG, type FeatureType, type LiftTier } from '../config';
 import { buildingInvested, nextLodgeUpgrade, seatsOf } from '../sim/buildings';
 import { income } from '../sim/economy';
-import { liftCapacity, liftTier, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
+import { liftCapacity, liftTier, type Lift, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
 import { featureUpkeep, funFor, profileRun, rateRun } from '../sim/runs';
@@ -44,6 +44,22 @@ const SKIER_GROUPS = ['beginners', 'intermediates', 'advanced skiers', 'experts'
 
 const CLOSE: PanelButton = { label: 'Close', action: 'close' };
 const CANCEL: PanelButton = { label: 'Cancel', action: 'cancel' };
+
+/** Before → after numbers for a lift's next upgrade. */
+function upgradeRows(lift: Lift, next: LiftTier): (readonly [string, string])[] {
+  const now = liftTier(lift);
+  const spec = CONFIG.lifts[lift.type];
+  const speed = (t: LiftTier): string => `${Math.round(spec.speed * t.speedFactor * 10) / 10} m/s`;
+  const capacity = (t: LiftTier): string => Math.round(spec.capacityPerHour * t.capacityFactor).toLocaleString('en-US');
+  const effort = (t: LiftTier): string => (t.effort >= 1 ? 'tiring' : t.effort > 0 ? 'light' : 'none');
+  return [
+    ['After upgrade', next.name],
+    ['Capacity', `${capacity(now)} → ${capacity(next)}/hour`],
+    ['Speed', `${speed(now)} → ${speed(next)}`],
+    ...(now.effort !== next.effort ? [['Effort on the way up', `${effort(now)} → ${effort(next)}`] as const] : []),
+    ...(now.covered !== next.covered ? [['Seats', 'open → covered, runs in storms'] as const] : []),
+  ];
+}
 
 /** What the side panel should show for the current tool or selection, or null for nothing. */
 export function describePanel(world: World, ui: UiState): PanelModel | null {
@@ -157,13 +173,15 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
         ['In line', `${lift.queue.length} (wait ${minutes(waitSeconds(lift))})`],
         ['Riding', String(resort.skiers.filter((s) => s.state.kind === 'riding' && s.state.liftId === lift.id).length)],
         ['Runs from the top', runs.length === 0 ? 'None yet' : runs.map((r) => r.name).join(', ')],
-        ...(next ? [['Next upgrade', `${next.name}: ${Math.round(CONFIG.lifts[lift.type].speed * next.speedFactor * 10) / 10} m/s, ${Math.round(CONFIG.lifts[lift.type].capacityPerHour * next.capacityFactor).toLocaleString('en-US')}/hour`] as const] : []),
+        ['Upgrade path', CONFIG.liftTiers[lift.type].map((t, i) => (i === lift.tier ? `[${t.name}]` : i < lift.tier ? t.name : `${t.name} ${t.stars}★`)).join(' → ')],
+        ...(next ? upgradeRows(lift, next) : []),
       ],
       note: held ? 'Stopped on wind hold. Covered seats (bubble chairs and gondolas) keep running in storms.'
         : runs.length === 0 ? 'Draw a run from the top station so skiers have somewhere to go.'
         : next && problem ? problem : undefined,
       actions: [
-        ...(next ? [{ label: `Upgrade (${money(upgradeCost(lift)!)})`, action: 'upgrade', primary: true, disabled: problem !== null } as const] : []),
+        // Never disabled: a click on a locked upgrade says what it needs, through the toast.
+        ...(next ? [{ label: world.company.stars < next.stars ? `${next.name} needs ${next.stars}★` : `Upgrade to ${next.name} (${money(upgradeCost(lift)!)})`, action: 'upgrade', primary: problem === null } as const] : []),
         { label: `Remove (refund ${money(lift.invested * CONFIG.economy.removalRefund)})`, action: 'remove' },
         CLOSE,
       ],

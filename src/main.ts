@@ -96,7 +96,14 @@ function menu(command: MenuCommand): void {
     if (loaded) startWorld(loaded);
     return toast(loaded ? 'Save loaded.' : 'No saved game yet.');
   }
-  if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) startWorld(createWorld(randomSeed()));
+  if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) newMountain(true);
+}
+
+// A new mountain waits for P, so there's time to look around and plan the first lift.
+function newMountain(fresh: boolean): void {
+  if (fresh) startWorld(createWorld(randomSeed()));
+  speedIndex = speedBeforeMenu = 0;
+  toast('Your mountain is paused. Press P (or ▶) to start the day.', 6);
 }
 
 // The game is paused while the start screen or pause menu is up.
@@ -120,7 +127,7 @@ function choose(choice: MenuChoice): void {
       // A fresh, untouched mountain is already new; anything else asks first.
       const untouched = world.calendar.day === 1 && activeResort(world).lifts.length === 0;
       if (!untouched && !window.confirm('Start a new mountain? Anything since your last save will be lost.')) return;
-      if (!untouched) startWorld(createWorld(randomSeed()));
+      newMountain(!untouched);
       return closeMenu();
     }
     case 'help': return;
@@ -212,7 +219,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && store) saveGame(store, world);
 });
 resize();
-if (!seedParam) {
+if (seedParam) newMountain(false);
+else {
   speedIndex = 0;
   menus.showStart(saved !== null);
 }

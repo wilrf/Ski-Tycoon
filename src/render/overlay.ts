@@ -3,7 +3,7 @@ import { lerp, pointAlong, projectOnPolyline, vec, type Vec2 } from '../sim/geom
 import { landEdge } from '../sim/progress';
 import { featureProblem, gradeToDifficulty } from '../sim/runs';
 import { cellGrade, terrainExtent, type Terrain } from '../sim/terrain';
-import { activeResort, buildingProblemsHere, heldLifts } from '../sim/world';
+import { activeResort, buildingProblemsHere, heldLifts, runStartAt } from '../sim/world';
 import { money } from '../ui/format';
 import { toScreen } from './camera';
 import type { Frame } from './renderer';
@@ -24,6 +24,12 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(slopeGuide(resort.terrain), origin.x, origin.y, extent * camera.zoom, extent * camera.zoom);
     ctx.globalAlpha = 1;
+    // Before the first point, ring every lift top a run can start from, and show where a press would snap.
+    if (ui.tool.points.length === 0) {
+      for (const l of resort.lifts) ring(ctx, at(l.top), 14, 'rgba(255, 255, 255, 0.9)');
+      const snap = ui.hover && runStartAt(world, ui.hover);
+      if (snap) ring(ctx, at(snap), 9, '#ffb703', true);
+    }
   }
 
   // Land that isn't bought yet is under cloud, with what it costs to open it up.
@@ -135,6 +141,20 @@ function feature(ctx: CanvasRenderingContext2D, p: Vec2, type: FeatureType, zoom
   ctx.fillText(FEATURE_ICON[type], p.x, p.y + 1);
   ctx.textAlign = 'start';
   ctx.textBaseline = 'alphabetic';
+}
+
+function ring(ctx: CanvasRenderingContext2D, c: Vec2, r: number, color: string, fill = false): void {
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  if (fill) {
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  ctx.setLineDash(fill ? [] : [4, 4]);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = fill ? '#17233d' : color;
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 function pill(ctx: CanvasRenderingContext2D, c: Vec2, text: string): void {

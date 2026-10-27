@@ -153,7 +153,7 @@ export const CONFIG = {
   liftTiers: {
     ropeTow: [
       { name: 'Rope tow', speedFactor: 1, capacityFactor: 1, upgradeCostFactor: 0, stars: 0, effort: 1, covered: false },
-      { name: 'T-bar', speedFactor: 1.2, capacityFactor: 1.6, upgradeCostFactor: 0.8, stars: 2, effort: 0.4, covered: false },
+      { name: 'T-bar', speedFactor: 1.2, capacityFactor: 1.6, upgradeCostFactor: 0.8, stars: 1, effort: 0.4, covered: false },
     ],
     chairlift: [
       { name: 'Double chair', speedFactor: 1, capacityFactor: 1, upgradeCostFactor: 0, stars: 0, effort: 0, covered: false },
@@ -255,7 +255,7 @@ export const CONFIG = {
     { name: 'Summit bowl', fromY: 0, cost: 600_000, stars: 4 },
   ],
   review: {
-    everyDays: 5,
+    everyDays: 3,
     magazine: 'Powder Line',
     /** Cash prize the first time the resort reaches each star level. */
     starBonus: 50_000,
