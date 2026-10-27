@@ -158,8 +158,13 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   if (runPoints.length > 0) {
     const profile = profileRun(resort.terrain, runPoints);
     if (runPoints.length > 1) drawRun(runPoints, profile.difficulty, 'rgba(255, 183, 3, 0.6)');
-    runPoints.forEach((p) => marker(ctx, at(p), LEVEL_COLORS[profile.difficulty]));
-    if (runPoints.length > 1) tag(ctx, at(runPoints[runPoints.length - 1]!), `${Math.round(polylineLength(runPoints))} m · ↓${Math.round(profile.vertical)} m`);
+    // Only the ends get markers: a drag-drawn run has a point every few metres.
+    const last = runPoints[runPoints.length - 1]!;
+    marker(ctx, at(runPoints[0]!), LEVEL_COLORS[profile.difficulty]);
+    if (runPoints.length > 1) {
+      marker(ctx, at(last), LEVEL_COLORS[profile.difficulty]);
+      tag(ctx, at(last), `${Math.round(polylineLength(runPoints))} m · ↓${Math.round(profile.vertical)} m`);
+    }
   }
 
   for (const s of resort.skiers) {
