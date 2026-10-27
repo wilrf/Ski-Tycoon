@@ -31,10 +31,9 @@ CANDIDATES: dict[str, list[str]] = {
                "Mount Williamson", "Cathedral Peak (California)", "Mount Lyell (California)", "Clouds Rest"],
     "appalachians": ["Mount Washington (New Hampshire)", "Mount Mitchell", "Clingmans Dome", "Grandfather Mountain",
                      "Mount Katahdin", "Mount Le Conte (Tennessee)", "Mount Rogers", "Spruce Knob", "Mount Mansfield"],
-    "japan_alps": ["Mount Hotaka", "Mount Yari", "Mount Tate", "Mount Shirouma", "Mount Kita", "Mount Ontake",
+    "japan_alps": ["Mount Hotakadake", "Mount Yari", "Mount Tate", "Mount Shirouma", "Mount Kita", "Mount Ontake",
                    "Mount Norikura", "Mount Tsurugi (Toyama)", "Mount Kashimayari"],
-    "hokkaido": ["Mount Yōtei", "Mount Asahi (Hokkaido)", "Mount Tokachi (Hokkaido)", "Mount Rausu", "Mount Rishiri",
-                 "Niseko Annupuri", "Mount Meakan"],
+    "hokkaido": ["Mount Yōtei", "Asahi-dake", "Mount Tokachi (Daisetsuzan)", "Mount Rausu", "Mount Rishiri", "Mount Meakan"],
 }
 
 
@@ -51,7 +50,7 @@ def get_json(url: str) -> dict:
 
 
 def resolve(titles: list[str]) -> dict[str, dict]:
-    """Follows redirects and returns the canonical title, summit coordinates and elevation article for each candidate."""
+    """Follows redirects and returns the canonical title and summit coordinates for each candidate."""
     q = urllib.parse.urlencode({"action": "query", "format": "json", "redirects": 1, "prop": "coordinates",
                                 "titles": "|".join(titles), "coprimary": "primary", "colimit": "max"})
     data = get_json(f"https://en.wikipedia.org/w/api.php?{q}")["query"]
@@ -65,25 +64,12 @@ def resolve(titles: list[str]) -> dict[str, dict]:
     out = {}
     for asked, title in canon.items():
         page = pages.get(title, {})
-        if "missing" in page:
-            hit = search(asked)
-            if hit:
-                print(f"  {asked!r} -> {hit!r}")
-                out.update({asked: v for v in resolve([hit]).values()})
-                continue
         if not page.get("coordinates"):
             print(f"  skip {asked!r}: {'missing' if 'missing' in page else 'no coordinates'}")
             continue
         c = page["coordinates"][0]
         out[asked] = {"title": title, "lat": c["lat"], "lon": c["lon"]}
     return out
-
-
-def search(name: str) -> str | None:
-    """Top full-text hit for a name whose guessed title has no article."""
-    q = urllib.parse.urlencode({"action": "query", "format": "json", "list": "search", "srsearch": name, "srlimit": 1})
-    hits = get_json(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["search"]
-    return hits[0]["title"] if hits else None
 
 
 def pageviews(title: str) -> int:
