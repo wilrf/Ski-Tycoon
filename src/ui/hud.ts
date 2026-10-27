@@ -30,8 +30,8 @@ export function createHud(h: HudHandlers): (world: World, speedIndex: number) =>
     set(fields.day, `Day ${world.calendar.day}`);
     set(fields.time, isClosed(world) ? 'Closed' : clock(world.calendar.time));
     set(fields.money, money(world.company.money));
-    set(fields.skiers, `${skiers.length} skiers`);
-    set(fields.happiness, skiers.length ? `${percent(skiers.reduce((sum, s) => sum + s.happiness, 0) / skiers.length)} happy` : '– happy');
+    set(fields.skiers, String(skiers.length));
+    set(fields.happiness, skiers.length ? percent(skiers.reduce((sum, s) => sum + s.happiness, 0) / skiers.length) : '–');
     speedButtons.forEach((b, i) => b.classList.toggle('active', i === speedIndex));
     const hint = liftsFrom(resort, resort.entrance).length > 0 ? '' : 'Build a lift starting in the flat base area at the bottom to open the mountain.';
     set(fields.hint, hint);
