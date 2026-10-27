@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { distToSegment, vec } from '../src/sim/geometry';
 import type { Run } from '../src/sim/runs';
 import type { SkillLevel } from '../src/sim/skiers';
-import { skiingPose, snowPuffs } from '../src/render/skierMotion';
+import { skiingPose, snowPuffs, trailPoses } from '../src/render/skierMotion';
 import { makeRun, makeSkier, plane } from './helpers';
 
 const line = [vec(500, 100), vec(500, 700)];
@@ -81,5 +81,15 @@ describe('skiing pose', () => {
       const landed = snowPuffs(skierOn(jumpRun, 3, 300 + 24 + 0.5), [jumpRun], 1);
       expect(landed.length).toBeGreaterThanOrEqual(12);
     });
+  });
+
+  it('leaves a trail back up the line the skier just skied, on the run', () => {
+    const run = makeRun(plane(0.3), line);
+    const trail = trailPoses(skierOn(run, 2, 200), [run], 1);
+    expect(trail.length).toBeGreaterThan(10);
+    expect(trail[0]!.pos).toEqual(skiingPose(skierOn(run, 2, 200), [run], 1)!.pos);
+    // Newest first, so each point is further up the run (smaller y here).
+    for (let i = 1; i < trail.length; i++) expect(trail[i]!.pos.y).toBeLessThan(trail[i - 1]!.pos.y);
+    for (const p of trail) expect(Math.abs(p.pos.x - 500)).toBeLessThan(11);
   });
 });

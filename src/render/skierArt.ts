@@ -118,3 +118,31 @@ export function drawPuffs(ctx: CanvasRenderingContext2D, puffs: readonly { reado
   }
   ctx.globalAlpha = 1;
 }
+
+/**
+ * The fresh line behind a skier, fading with distance. Carvers leave two pencil-thin edge lines; skidders
+ * smear one soft, wider track. Breaks where the skier was in the air.
+ */
+export function drawTrail(ctx: CanvasRenderingContext2D, poses: readonly { readonly pos: Vec2; readonly heading: number; readonly air: number }[], at: (p: Vec2) => Vec2, zoom: number, carving: boolean): void {
+  const lines = carving ? [-0.35, 0.35] : [0];
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#7f92bd';
+  ctx.lineWidth = carving ? Math.max(0.8, zoom * 0.25) : Math.max(1.5, zoom * 1.1);
+  for (let i = 1; i < poses.length; i++) {
+    const a = poses[i - 1]!, b = poses[i]!;
+    if (a.air > 0 || b.air > 0) continue;
+    ctx.globalAlpha = (carving ? 0.55 : 0.3) * (1 - i / poses.length);
+    for (const offset of lines) {
+      const pa = at(sideways(a, offset)), pb = at(sideways(b, offset));
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** A point `offset` metres to the left of a pose, for drawing each ski's edge. */
+const sideways = (p: { readonly pos: Vec2; readonly heading: number }, offset: number): Vec2 =>
+  vec(p.pos.x - Math.sin(p.heading) * offset, p.pos.y + Math.cos(p.heading) * offset);
