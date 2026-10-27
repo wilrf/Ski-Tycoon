@@ -239,6 +239,8 @@ export const CONFIG = {
     fairTicketPrice: 59,
     ticketPriceRange: [19, 149],
     ticketPriceStep: 5,
+    /** Lift rides a skier wants in a day, for working out how many skiers the lifts carry comfortably. */
+    ridesPerSkierDay: 8,
     /** Arrivals scale with (fair price / price) to this power. */
     priceSensitivity: 0.8,
     /** Happiness lost per dollar over the fair price, or gained per dollar under it. */

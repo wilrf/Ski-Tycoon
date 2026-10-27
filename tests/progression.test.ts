@@ -252,3 +252,20 @@ describe('day report fixes', () => {
     if (!result.ok) expect(result.reason).toContain(`end of day ${CONFIG.review.everyDays}`);
   });
 });
+
+describe('ticket price forecast', () => {
+  it('expects more skiers at a lower price, and knows how many the lifts carry', async () => {
+    const { forecastDay } = await import('../src/sim/world');
+    const world = builtWorld();
+    const resort = activeResort(world);
+    const cheap = forecastDay(world, resort, 29), dear = forecastDay(world, resort, 99);
+    expect(cheap.skiers).toBeGreaterThan(dear.skiers);
+    expect(cheap.comfortable).toBe(dear.comfortable);
+    expect(cheap.comfortable).toBeGreaterThan(0);
+    // The forecast is in the right ballpark of a real day at the same price.
+    const forecast = forecastDay(world, resort, resort.ticketPrice).skiers;
+    const day = playDay(world).stats.arrivals;
+    expect(forecast).toBeGreaterThan(day * 0.6);
+    expect(forecast).toBeLessThan(day * 1.6);
+  });
+});

@@ -3,7 +3,7 @@ import { buildingInvested, buildingProblems, nextLodgeUpgrade, type Building } f
 import { build, createCompany, earn, emptyLedger, payUpkeep, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
 import { clamp, dist, pointAlong, vec, type Vec2 } from './geometry';
 import { newGuest, recordVisit, regularsComing, trimGuests, type Guest } from './guests';
-import { boardLift, liftTier, nextTier, planLift, queueSpot, upgradeCost, waitSeconds, type Lift, type LiftPlan } from './lifts';
+import { boardLift, liftCapacity, liftTier, nextTier, planLift, queueSpot, upgradeCost, waitSeconds, type Lift, type LiftPlan } from './lifts';
 import { isBase, liftsFrom, runAt, type Mountain } from './network';
 import { emptyWeek, landProblem, writeReview, type Review, type Week } from './progress';
 import { offerRequest, requestMet, type Request } from './requests';
@@ -152,6 +152,31 @@ const ARRIVAL_SECONDS = (CONFIG.calendar.lastArrivalHour - CONFIG.calendar.openH
 export function demandFactor(world: World, resort: Resort): number {
   const [low, high] = CONFIG.reputation.demandRange;
   return (low + ((high - low) * resort.reputation) / 100) * priceDemand(resort.ticketPrice) * weatherSpec(world.weather.today).demand;
+}
+
+export interface DayForecast {
+  /** About how many skiers a full day would bring at this price, in today's weather. */
+  readonly skiers: number;
+  readonly tickets: number;
+  /**
+   * Skiers the lifts can carry without long lines: hourly lift capacity over the day, divided by the rides
+   * a skier wants. Real resorts plan to a "comfortable carrying capacity" worked out the same way.
+   */
+  readonly comfortable: number;
+}
+
+/** What a day would look like at `price`, from the same demand the arrivals use. */
+export function forecastDay(world: World, resort: Resort, price: number): DayForecast {
+  const { arrivalsPerHour, runsForFullDemand } = CONFIG.skiers;
+  const demand = (demandFactor(world, resort) / priceDemand(resort.ticketPrice)) * priceDemand(price);
+  const runDemand = 0.3 + 0.7 * Math.min(1, resort.runs.length / runsForFullDemand);
+  const pull = weatherSpec(world.weather.today).skillPull;
+  const regulars = resort.guests.reduce(
+    (sum, g) => sum + clamp((g.loyalty / 100) * CONFIG.guests.returnRate * demand * Math.sqrt(pull[g.skill]!), 0, 0.95), 0);
+  const skiers = resort.lifts.length === 0 ? 0 : Math.round((arrivalsPerHour * runDemand * demand * ARRIVAL_SECONDS) / 3600 + regulars);
+  const { openHour, closeHour } = CONFIG.calendar;
+  const comfortable = Math.round(resort.lifts.reduce((sum, l) => sum + liftCapacity(l), 0) * (closeHour - openHour) / CONFIG.economy.ridesPerSkierDay);
+  return { skiers, tickets: skiers * price, comfortable };
 }
 
 /** Each morning, every regular decides whether to come today. */

@@ -9,7 +9,7 @@ import { bakeTerrain } from './render/terrainArt';
 import { loadGame, saveGame } from './save/save';
 import type { Vec2 } from './sim/geometry';
 import { terrainExtent } from './sim/terrain';
-import { activeResort, createWorld, tick, type World, type WorldEvent } from './sim/world';
+import { activeResort, applyCommand, createWorld, tick, type World, type WorldEvent } from './sim/world';
 import { fixFor } from './ui/fixes';
 import { money, requestTitle } from './ui/format';
 import { createHud, type MenuCommand } from './ui/hud';
@@ -157,7 +157,11 @@ function setSpeed(index: number): void {
 }
 
 const refreshHud = createHud({ speed: setSpeed, menu, resort: () => act('resort') });
-const renderPanel = createPanel(document.getElementById('panel')!, act);
+const renderPanel = createPanel(document.getElementById('panel')!, act, (price) => {
+  if (!Number.isFinite(price)) return;
+  const result = applyCommand(world, { type: 'setTicketPrice', price });
+  if (!result.ok) toast(result.reason);
+});
 const refreshToolbar = createToolbar(document.getElementById('toolbar')!, (choice) => selectTool(ui, toolFor(choice)));
 let speedBeforePause = 1;
 

@@ -63,3 +63,12 @@ button.stat.rating { min-height: 28px; padding: 2px 10px; color: var(--accent); 
 #hint { cursor: pointer; }
 .emoji-tool { font-size: 18px; }
 .emoji-tool span { font-size: 12px; }
+
+#panel .tabs { display: flex; gap: 4px; margin: 0 0 10px; padding: 3px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); }
+#panel .tabs[hidden] { display: none; }
+#panel .tabs button { flex: 1; min-height: 34px; padding: 4px 6px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
+#panel .tabs button.active { background: var(--accent); color: #17233d; }
+#panel .slider { display: grid; grid-template-columns: 1fr 64px; gap: 6px 8px; align-items: center; margin-bottom: 10px; }
+#panel .slider span { grid-column: 1 / -1; color: var(--muted); }
+#panel .slider input[type='range'] { width: 100%; accent-color: var(--accent); min-height: 28px; }
+#panel .slider input[type='number'] { width: 64px; min-height: 34px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); color: var(--ink); font: inherit; font-weight: 800; text-align: right; }

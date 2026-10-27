@@ -14,8 +14,13 @@ export type Tool =
 
 export type Selection = { readonly kind: 'lift' | 'run' | 'skier' | 'building'; readonly id: number } | { readonly kind: 'resort' } | null;
 
+export const RESORT_TABS = ['overview', 'prices', 'goals', 'land'] as const;
+export type ResortTab = (typeof RESORT_TABS)[number];
+
 export interface UiState {
   tool: Tool;
+  /** The tab the resort window last showed. */
+  resortTab: ResortTab;
   selection: Selection;
   /** World point under the mouse, for live previews; null on touch screens. */
   hover: Vec2 | null;
@@ -25,9 +30,9 @@ export interface UiState {
 
 export type UiAction =
   | 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort'
-  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice';
+  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice' | `tab:${ResortTab}`;
 
-export const createUiState = (): UiState => ({ tool: { kind: 'select' }, selection: null, hover: null, stroking: false });
+export const createUiState = (): UiState => ({ tool: { kind: 'select' }, resortTab: 'overview', selection: null, hover: null, stroking: false });
 
 /** Drag-drawn runs keep a point about this often, in metres. */
 const STROKE_SPACING = 20;
@@ -205,6 +210,12 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
     case 'feature:mediumJump':
     case 'feature:largeJump':
       if (tool.kind === 'feature') ui.tool = { ...tool, featureType: action.slice('feature:'.length) as FeatureType };
+      return null;
+    case 'tab:overview':
+    case 'tab:prices':
+    case 'tab:goals':
+    case 'tab:land':
+      ui.resortTab = action.slice('tab:'.length) as ResortTab;
       return null;
     case 'apresPrice': {
       // Cycles Low → Medium → High → Low.
