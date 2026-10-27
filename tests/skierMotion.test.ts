@@ -92,4 +92,14 @@ describe('skiing pose', () => {
     for (let i = 1; i < trail.length; i++) expect(trail[i]!.pos.y).toBeLessThan(trail[i - 1]!.pos.y);
     for (const p of trail) expect(Math.abs(p.pos.x - 500)).toBeLessThan(11);
   });
+
+  it('finishes the run with a hockey stop: skis across the hill and a spray of snow', () => {
+    const run = makeRun(plane(0.3), line);
+    const end = run.profile.length;
+    const pose = skiingPose(skierOn(run, 2, end), [run], 1)!;
+    // The run line points straight down (+y); the skis end up across it.
+    expect(Math.abs(Math.cos(pose.heading))).toBeGreaterThan(0.95);
+    expect(pose.pos.x).toBeCloseTo(500);
+    expect(snowPuffs(skierOn(run, 2, end - 1), [run], 1).length).toBeGreaterThanOrEqual(10);
+  });
 });
