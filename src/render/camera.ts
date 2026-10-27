@@ -66,3 +66,13 @@ export function timeScaleAt(zoom: number, speedIndex: number): number {
   const cap = Math.exp(Math.log(base) + (Math.log(slowMotion.gameSecondsPerSecond) - Math.log(base)) * t);
   return Math.min(1, cap / rate);
 }
+
+/**
+ * Eases the camera toward `target` so a followed skier stays centred without the view jerking each tick.
+ * Frame-rate independent: the same share of the gap closes per second however often it's called.
+ */
+export function follow(c: Camera, target: Vec2, seconds: number): void {
+  const k = 1 - Math.exp(-seconds * 5);
+  c.x += (target.x - c.x) * k;
+  c.y += (target.y - c.y) * k;
+}
