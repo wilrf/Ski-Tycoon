@@ -3,6 +3,9 @@
 export type LiftType = 'ropeTow' | 'chairlift' | 'gondola';
 /** 0 = green / beginner, 1 = blue / intermediate, 2 = black / advanced, 3 = double black / expert. */
 export type Level = 0 | 1 | 2 | 3;
+/** Skier skill: beginner, intermediate, expert, pro and olympic. Run colours stop at double black (Level 3). */
+export type Skill = 0 | 1 | 2 | 3 | 4;
+export type PerSkill = readonly [number, number, number, number, number];
 
 export interface LiftSpec {
   readonly label: string;
@@ -40,7 +43,7 @@ export interface WeatherSpec {
   /** Multiplies how fun a run is, by difficulty. */
   readonly fun: readonly [number, number, number, number];
   /** Multiplies the share of new visitors at each skill level. */
-  readonly skillPull: readonly [number, number, number, number];
+  readonly skillPull: PerSkill;
   /** Exposed lifts stop: the ones whose top is high up and whose seats aren't covered. */
   readonly windHold: boolean;
   /** Relative chances of tomorrow's weather. */
@@ -85,8 +88,8 @@ export interface FeatureSpec {
   readonly cost: number;
   /** Cat hours and park crew to keep it shaped. */
   readonly upkeepPerDay: number;
-  /** How much beginners, intermediates, advanced and experts like it, 0 to 1. Anyone at 0 rides around it. */
-  readonly appeal: readonly [number, number, number, number];
+  /** How much beginners, intermediates, experts, pros and olympians like it, 0 to 1. Anyone at 0 rides around it. */
+  readonly appeal: PerSkill;
 }
 
 export const CONFIG = {
@@ -137,12 +140,12 @@ export const CONFIG = {
   },
   /** Prices are scaled to the game's lifts (a chair starts at $80k), not real dollars. */
   features: {
-    rollers: { label: 'Rollers', noun: 'the rollers', cost: 6_000, upkeepPerDay: 100, appeal: [1, 0.6, 0.2, 0.1] },
-    berms: { label: 'Berms', noun: 'the berms', cost: 10_000, upkeepPerDay: 150, appeal: [0.8, 1, 0.6, 0.4] },
-    tunnel: { label: 'Adventure tunnel', noun: 'the tunnel', cost: 25_000, upkeepPerDay: 200, appeal: [1, 0.5, 0.2, 0] },
-    smallJump: { label: 'Small jump', noun: 'the small jump', cost: 12_000, upkeepPerDay: 250, appeal: [0.3, 1, 0.5, 0.2] },
-    mediumJump: { label: 'Medium jump', noun: 'the medium jump', cost: 25_000, upkeepPerDay: 450, appeal: [0, 0.3, 1, 0.6] },
-    largeJump: { label: 'Large jump', noun: 'the large jump', cost: 50_000, upkeepPerDay: 800, appeal: [0, 0, 0.4, 1] },
+    rollers: { label: 'Rollers', noun: 'the rollers', cost: 6_000, upkeepPerDay: 100, appeal: [1, 0.6, 0.2, 0.1, 0] },
+    berms: { label: 'Berms', noun: 'the berms', cost: 10_000, upkeepPerDay: 150, appeal: [0.8, 1, 0.6, 0.4, 0.3] },
+    tunnel: { label: 'Adventure tunnel', noun: 'the tunnel', cost: 25_000, upkeepPerDay: 200, appeal: [1, 0.5, 0.2, 0, 0] },
+    smallJump: { label: 'Small jump', noun: 'the small jump', cost: 12_000, upkeepPerDay: 250, appeal: [0.3, 1, 0.5, 0.2, 0.1] },
+    mediumJump: { label: 'Medium jump', noun: 'the medium jump', cost: 25_000, upkeepPerDay: 450, appeal: [0, 0.3, 1, 0.6, 0.4] },
+    largeJump: { label: 'Large jump', noun: 'the large jump', cost: 50_000, upkeepPerDay: 800, appeal: [0, 0, 0.4, 1, 1] },
   } satisfies Record<FeatureType, FeatureSpec>,
   featureRules: {
     maxPerRun: 4,
@@ -291,16 +294,18 @@ export const CONFIG = {
     progressPerRun: 0.05,
     progressPerStretch: 0.15,
     maxProgressPerVisit: 0.4,
+    /** Guests can practise their way up to pro, but nobody becomes an olympian on holiday. */
+    maxTaughtSkill: 3,
   },
   weather: {
     /** In a storm, exposed lifts whose top is above this fraction of the peak height stop on wind hold. */
     windHoldHeight: 0.45,
     kinds: {
-      bluebird: { label: 'Bluebird', emoji: '☀️', demand: 1.2, fun: [1, 1, 1, 1], skillPull: [1, 1, 1, 1], windHold: false, next: { bluebird: 3, cloudy: 3, powder: 1, storm: 1, warm: 1 } },
-      cloudy: { label: 'Cloudy', emoji: '☁️', demand: 1, fun: [1, 1, 0.95, 0.95], skillPull: [1, 1, 1, 1], windHold: false, next: { bluebird: 2, cloudy: 2, powder: 1, storm: 2, warm: 1 } },
-      storm: { label: 'Storm', emoji: '🌨️', demand: 0.6, fun: [0.85, 0.9, 0.9, 0.9], skillPull: [0.6, 1, 1.3, 1.5], windHold: true, next: { bluebird: 1, cloudy: 1, powder: 4, storm: 1, warm: 0 } },
-      powder: { label: 'Powder day', emoji: '❄️', demand: 1.5, fun: [1, 1.15, 1.4, 1.5], skillPull: [0.7, 1, 1.8, 2.4], windHold: false, next: { bluebird: 4, cloudy: 2, powder: 1, storm: 1, warm: 0 } },
-      warm: { label: 'Spring slush', emoji: '🌤️', demand: 0.85, fun: [0.9, 0.85, 0.8, 0.75], skillPull: [1.2, 1, 0.8, 0.7], windHold: false, next: { bluebird: 2, cloudy: 3, powder: 0, storm: 2, warm: 2 } },
+      bluebird: { label: 'Bluebird', emoji: '☀️', demand: 1.2, fun: [1, 1, 1, 1], skillPull: [1, 1, 1, 1, 1], windHold: false, next: { bluebird: 3, cloudy: 3, powder: 1, storm: 1, warm: 1 } },
+      cloudy: { label: 'Cloudy', emoji: '☁️', demand: 1, fun: [1, 1, 0.95, 0.95], skillPull: [1, 1, 1, 1, 1], windHold: false, next: { bluebird: 2, cloudy: 2, powder: 1, storm: 2, warm: 1 } },
+      storm: { label: 'Storm', emoji: '🌨️', demand: 0.6, fun: [0.85, 0.9, 0.9, 0.9], skillPull: [0.6, 1, 1.3, 1.5, 1.5], windHold: true, next: { bluebird: 1, cloudy: 1, powder: 4, storm: 1, warm: 0 } },
+      powder: { label: 'Powder day', emoji: '❄️', demand: 1.5, fun: [1, 1.15, 1.4, 1.5], skillPull: [0.7, 1, 1.8, 2.4, 2.4], windHold: false, next: { bluebird: 4, cloudy: 2, powder: 1, storm: 1, warm: 0 } },
+      warm: { label: 'Spring slush', emoji: '🌤️', demand: 0.85, fun: [0.9, 0.85, 0.8, 0.75], skillPull: [1.2, 1, 0.8, 0.7, 0.7], windHold: false, next: { bluebird: 2, cloudy: 3, powder: 0, storm: 2, warm: 2 } },
     } satisfies Record<Weather, WeatherSpec>,
   },
   reputation: {
@@ -316,8 +321,9 @@ export const CONFIG = {
     maxOnMountain: 900,
     /** Arrivals scale with the number of runs, up to this many. */
     runsForFullDemand: 6,
-    skillMix: [0.3, 0.4, 0.2, 0.1],
-    skiSpeed: [4, 7, 10, 13],
+    /** Olympians are a rare sight on a public mountain: about one guest in fifty. */
+    skillMix: [0.3, 0.4, 0.2, 0.08, 0.02],
+    skiSpeed: [4, 7, 10, 13, 16],
     scaredSpeedFactor: 0.5,
     walkSpeed: 1.3,
     leaveSpeed: 4,
