@@ -9,6 +9,7 @@ import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
+import { skiingPose } from './skierMotion';
 import { scaleBucket, sprite } from './sprites';
 import { stampPine, type TerrainArt } from './terrainArt';
 
@@ -52,7 +53,8 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
     min: toWorld(camera, view, vec(0, 0)),
     max: toWorld(camera, view, vec(view.width, view.height)),
   };
-  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null): void => paintRun(ctx, points, level, outline, runView);
+  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null, wear = 0): void =>
+    paintRun(ctx, points, level, outline, runView, wear);
 
   type LiftShape = Pick<Lift, 'type' | 'bottom' | 'top'>;
   const frameOf = (lift: LiftShape) => {
@@ -146,9 +148,34 @@ function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   }
 
   ctx.lineCap = ctx.lineJoin = 'round';
-  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null);
+  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null, runWear(run.id));
   for (const lift of resort.lifts) liftStructure(lift, isSelected(ui, 'lift', lift.id));
 }
+
+/**
+ * How skied-in each run looks, from 0 (fresh corduroy) to 1, by counting the different skiers who have
+ * skied it today. Resets each morning, after the night's grooming. Cosmetic, so it lives here, not in the sim.
+ */
+const skiedBy = new Map<number, Set<number>>();
+let wearDay = -1;
+/** Skiers it takes to fully wear in a run. */
+const FULL_WEAR = 30;
+
+function noteSkiers(world: World): void {
+  if (world.calendar.day !== wearDay) {
+    skiedBy.clear();
+    wearDay = world.calendar.day;
+  }
+  for (const s of activeResort(world).skiers) {
+    if (s.state.kind !== 'skiing') continue;
+    let seen = skiedBy.get(s.state.runId);
+    if (!seen) skiedBy.set(s.state.runId, (seen = new Set()));
+    if (seen.size < FULL_WEAR) seen.add(s.id);
+  }
+}
+
+/** Snapped to sixths so the cached map is repainted only a few times as a run wears in. */
+const runWear = (runId: number): number => Math.round(((skiedBy.get(runId)?.size ?? 0) / FULL_WEAR) * 6) / 6;
 
 /** Everything except the camera's position that changes what drawStill paints. Cheap, so it is checked every frame. */
 function stillKey(f: Frame, canvas: { width: number; height: number }): string {
@@ -157,7 +184,7 @@ function stillKey(f: Frame, canvas: { width: number; height: number }): string {
   return [
     camera.zoom, view.width, view.height, canvas.width, canvas.height,
     ui.selection ? `${ui.selection.kind}${'id' in ui.selection ? ui.selection.id : ''}` : '',
-    resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}`).join(','),
+    resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}:${runWear(r.id)}`).join(','),
     resort.lifts.map((l) => `${l.id}:${l.type}`).join(','),
   ].join('|');
 }
@@ -234,6 +261,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   sky.addColorStop(1, '#8fb3d9');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, view.width, view.height);
+  noteSkiers(world);
   const layer = updateStill(ctx, f);
   // The layer is at device pixels, so paste it with the canvas's scale undone.
   const dpr = ctx.getTransform().a;
@@ -284,13 +312,17 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 
   for (const s of drawnSkiers(world, f.speedIndex, ui.selection)) {
     const prev = f.previous.get(s.id);
-    const pos = prev ? lerp(prev, s.pos, f.alpha) : s.pos;
+    const skiing = skiingPose(s, resort.runs, f.alpha);
+    const pos = skiing?.pos ?? (prev ? lerp(prev, s.pos, f.alpha) : s.pos);
     const p = at(pos);
     if (p.x < -20 || p.y < -20 || p.x > view.width + 20 || p.y > view.height + 20) continue;
-    if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
+    if (skiing) headings.set(s.id, skiing.heading);
+    else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     const riding = s.state.kind === 'riding';
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
-    stampSkier(ctx, p, headings.get(s.id) ?? Math.PI / 2, px(1.6, 1.8), JACKETS[s.id % JACKETS.length]!, riding, isSelected(ui, 'skier', s.id));
+    const u = px(1.6, 1.8), jacket = JACKETS[s.id % JACKETS.length]!, heading = headings.get(s.id) ?? Math.PI / 2;
+    if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
+    else stampSkier(ctx, p, heading, u, jacket, riding, isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
@@ -327,10 +359,22 @@ function stampSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: 
 }
 
 /**
+ * A skier in the air: the shadow stays on the snow, pushed south-east by the sun as they rise, and the
+ * figure grows a little as it nears the camera. `lift` is their height in pixels.
+ */
+function airborne(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, lift: number): void {
+  ctx.fillStyle = 'rgba(30, 40, 80, 0.22)';
+  ctx.beginPath();
+  ctx.ellipse(p.x + u * 0.9 + lift * 0.7, p.y + u * 0.9 + lift * 0.7, u * 1.1, u * 0.7, Math.PI / 4, 0, Math.PI * 2);
+  ctx.fill();
+  drawSkier(ctx, p, heading, u * (1 + lift / (u * 12)), jacket, false, false, false);
+}
+
+/**
  * A skier seen from above, `u` pixels per metre and facing `heading`: skis and poles, a jacket and a helmet,
  * with a shadow to the south-east. Riders sit without skis showing.
  */
-function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, riding: boolean, selected: boolean): void {
+function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, riding: boolean, selected: boolean, shadow = true): void {
   ctx.save();
   ctx.translate(p.x, p.y);
   if (selected) {
@@ -342,10 +386,12 @@ function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: n
     ctx.strokeStyle = SELECTED;
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(30, 40, 80, 0.3)';
-  ctx.beginPath();
-  ctx.ellipse(u * 0.9, u * 0.9, u * 1.1, u * 0.7, Math.PI / 4, 0, Math.PI * 2);
-  ctx.fill();
+  if (shadow) {
+    ctx.fillStyle = 'rgba(30, 40, 80, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(u * 0.9, u * 0.9, u * 1.1, u * 0.7, Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.rotate(heading);
   if (!riding) {
     ctx.strokeStyle = '#20242c';
