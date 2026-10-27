@@ -6,9 +6,8 @@ import { LEVEL_COLORS } from './colors';
 export const RUN_WIDTH = 22;
 const HALF = RUN_WIDTH / 2;
 const POLE_SPACING = 25;
-/** Below these zooms (pixels per metre) the detail is too small to see, so it isn't drawn. */
+/** Below this zoom (pixels per metre) the snow texture is too small to see, so it isn't drawn. */
 const TEXTURE_ZOOM = 0.9;
-const POLE_ZOOM = 0.6;
 
 /** Where a run's decoration sits, in world metres. Built once per run and reused every frame. */
 interface RunDecor {
@@ -111,14 +110,14 @@ export interface RunView {
 }
 
 /**
- * A run as it looks from above: a groomed swath edged in its difficulty colour, its snow texture, and
- * piste poles in its colour down both sides. Detail drops away as the camera zooms out.
+ * A run as it looks from above: a groomed swath with a faint edge, its snow texture, and piste poles in
+ * its difficulty colour down both sides, which are what mark the grade. The texture drops away zoomed out.
  */
 export function drawRun(ctx: CanvasRenderingContext2D, points: readonly Vec2[], level: Level, outline: string | null, v: RunView): void {
   const color = LEVEL_COLORS[level];
   const width = Math.max(6, RUN_WIDTH * v.zoom);
-  const line = (pts: readonly Vec2[]): void => {
-    ctx.beginPath();
+  // Every mark of a kind goes into one path and one fill or stroke: thousands of tiny draw calls cost more than the pixels.
+  const trace = (pts: readonly Vec2[]): void => {
     pts.forEach((p, i) => {
       const s = v.at(p);
       if (i === 0) ctx.moveTo(s.x, s.y);
@@ -130,50 +129,55 @@ export function drawRun(ctx: CanvasRenderingContext2D, points: readonly Vec2[], 
     ctx.lineWidth = w;
     ctx.stroke();
   };
+  const fill = (style: string): void => {
+    ctx.fillStyle = style;
+    ctx.fill();
+  };
 
-  line(points);
+  ctx.beginPath();
+  trace(points);
   if (outline) stroke(outline, width + 7);
-  stroke(color, width + 3);
+  stroke('rgba(90, 110, 160, 0.3)', width + 2);
   stroke('#f7faff', width);
-  // Zoomed out, the texture and poles vanish, so a centre stripe keeps the grade readable.
-  if (v.zoom < TEXTURE_ZOOM) stroke(color, Math.max(2, width * 0.18));
 
   const d = decorFor(points, level);
-  if (v.zoom < POLE_ZOOM || d.max.x < v.min.x || d.min.x > v.max.x || d.max.y < v.min.y || d.min.y > v.max.y) return;
+  if (d.max.x < v.min.x || d.min.x > v.max.x || d.max.y < v.min.y || d.min.y > v.max.y) return;
 
   if (v.zoom >= TEXTURE_ZOOM) {
-    for (const track of d.tracks) {
-      line(track);
-      stroke(level === 0 ? 'rgba(150, 168, 205, 0.22)' : 'rgba(105, 125, 175, 0.42)', Math.max(0.8, v.zoom * 0.45));
-    }
-    const r = (level === 3 ? 1.9 : 1.6) * v.zoom;
-    for (const m of d.moguls) {
-      const s = v.at(m);
-      // Sun from the north-west: shadowed south-east flank, bright north-west cap.
-      ctx.fillStyle = 'rgba(110, 130, 185, 0.38)';
-      ctx.beginPath();
-      ctx.ellipse(s.x + r * 0.35, s.y + r * 0.35, r, r * 0.8, 0.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.beginPath();
-      ctx.ellipse(s.x - r * 0.25, s.y - r * 0.25, r * 0.6, r * 0.45, 0.6, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.beginPath();
+    d.tracks.forEach(trace);
+    stroke(level === 0 ? 'rgba(150, 168, 205, 0.22)' : 'rgba(105, 125, 175, 0.42)', Math.max(0.8, v.zoom * 0.45));
+    if (d.moguls.length > 0) {
+      // Sun from the north-west: a shadowed south-east flank under a bright north-west cap.
+      const r = (level === 3 ? 1.9 : 1.6) * v.zoom;
+      const bumps = (dx: number, rx: number, ry: number): void => {
+        ctx.beginPath();
+        for (const m of d.moguls) {
+          const s = v.at(m), x = s.x + dx * r, y = s.y + dx * r;
+          ctx.moveTo(x + rx * r, y);
+          ctx.ellipse(x, y, rx * r, ry * r, 0.6, 0, Math.PI * 2);
+        }
+      };
+      bumps(0.35, 1, 0.8);
+      fill('rgba(110, 130, 185, 0.38)');
+      bumps(-0.25, 0.6, 0.45);
+      fill('rgba(255, 255, 255, 0.9)');
     }
   }
 
-  const head = Math.max(2.2, v.zoom * 1.1), lean = Math.max(4, v.zoom * 2.5);
-  const dark = level >= 2;
-  for (const pole of d.poles) {
-    const s = v.at(pole);
-    ctx.beginPath();
+  const head = Math.max(2.6, v.zoom * 1.1), lean = Math.max(4, v.zoom * 2.5);
+  const screen = d.poles.map(v.at);
+  ctx.beginPath();
+  for (const s of screen) {
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(s.x + lean * 0.7, s.y + lean * 0.45);
-    stroke('rgba(20, 30, 60, 0.3)', 1.5);
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, head, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    // Black poles get a bright cap so they don't read as holes in the snow.
-    stroke(dark ? '#ffd23f' : '#ffffff', dark ? 1.5 : 1);
   }
+  stroke('rgba(20, 30, 60, 0.3)', 1.5);
+  ctx.beginPath();
+  for (const s of screen) {
+    ctx.moveTo(s.x + head, s.y);
+    ctx.arc(s.x, s.y, head, 0, Math.PI * 2);
+  }
+  fill(color);
+  stroke('#ffffff', 1);
 }

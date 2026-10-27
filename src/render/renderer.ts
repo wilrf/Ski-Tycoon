@@ -42,12 +42,12 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.fillRect(0, 0, view.width, view.height);
   const origin = at(vec(0, 0));
   const size = terrainExtent(resort.terrain) * camera.zoom;
-  ctx.shadowColor = 'rgba(10, 20, 50, 0.45)';
-  ctx.shadowBlur = 30;
+  // A soft drop shadow from stacked translucent rings: shadowBlur on an image this big halves the frame rate.
+  ctx.fillStyle = 'rgba(10, 20, 50, 0.035)';
+  for (let r = 2; r <= 28; r += 2) ctx.fillRect(origin.x - r, origin.y - r + 6, size + r * 2, size + r * 2);
   // Close up, the baked trees would blur, so draw the visible ones as vectors over the bare ground.
   const vectorTrees = camera.zoom >= VECTOR_TREE_ZOOM;
   ctx.drawImage(vectorTrees ? f.terrain.ground : f.terrain.withTrees, origin.x, origin.y, size, size);
-  ctx.shadowColor = 'transparent';
   if (vectorTrees) {
     const min = toWorld(camera, view, vec(-20, -20)), max = toWorld(camera, view, vec(view.width + 20, view.height + 20));
     ctx.save();
