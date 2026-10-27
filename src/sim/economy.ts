@@ -9,6 +9,8 @@ export interface Ledger {
   bonuses: number;
   construction: number;
   refunds: number;
+  /** Nightly grooming and park crew for run features. */
+  upkeep: number;
 }
 
 export interface Company {
@@ -19,7 +21,7 @@ export interface Company {
   stars: number;
 }
 
-export const emptyLedger = (): Ledger => ({ tickets: 0, food: 0, apres: 0, bonuses: 0, construction: 0, refunds: 0 });
+export const emptyLedger = (): Ledger => ({ tickets: 0, food: 0, apres: 0, bonuses: 0, construction: 0, refunds: 0, upkeep: 0 });
 
 export const income = (l: Ledger): number => l.tickets + l.food + l.apres + l.bonuses;
 
@@ -31,6 +33,12 @@ export function build(company: Company, cost: number): boolean {
   company.money -= cost;
   company.today.construction += cost;
   return true;
+}
+
+/** Pays a running cost, which can take the company below zero. */
+export function payUpkeep(company: Company, amount: number): void {
+  company.money -= amount;
+  company.today.upkeep += amount;
 }
 
 export function refund(company: Company, cost: number): void {

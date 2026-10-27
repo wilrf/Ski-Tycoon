@@ -12,7 +12,8 @@ export function toolFor(choice: ToolChoice): Tool {
   }
 }
 
-const choiceOf = (tool: Tool): ToolChoice => (tool.kind === 'lift' ? tool.liftType : tool.kind === 'building' ? tool.buildingType : tool.kind);
+const choiceOf = (tool: Tool): ToolChoice =>
+  tool.kind === 'lift' ? tool.liftType : tool.kind === 'building' ? tool.buildingType : tool.kind === 'feature' ? 'select' : tool.kind;
 
 /** Wires the build toolbar and returns a function that highlights the active tool. */
 export function createToolbar(el: HTMLElement, onPick: (choice: ToolChoice) => void): (ui: UiState) => void {

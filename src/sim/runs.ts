@@ -1,4 +1,4 @@
-import { CONFIG, type Level } from '../config';
+import { CONFIG, type FeatureType, type Level } from '../config';
 import { clamp, pointAlong, polylineLength, type Vec2 } from './geometry';
 import { heightAt, inBounds, type Terrain } from './terrain';
 
@@ -9,6 +9,14 @@ export interface RunProfile {
   readonly vertical: number;
   readonly steepestGrade: number;
   readonly difficulty: Difficulty;
+  /** Radians of turning per 100 m, counted only where the run is dropping, not traversing. */
+  readonly curviness: number;
+}
+
+/** Something built onto a run, `at` metres down it. */
+export interface RunFeature {
+  readonly type: FeatureType;
+  readonly at: number;
 }
 
 export interface Run {
@@ -16,6 +24,7 @@ export interface Run {
   readonly name: string;
   readonly points: readonly Vec2[];
   readonly profile: RunProfile;
+  features: RunFeature[];
 }
 
 /** Each rating is 0 to 10. */
@@ -33,7 +42,7 @@ export function gradeToDifficulty(grade: number): Difficulty {
 /** Difficulty comes from the steepest downhill stretch, averaged over a short window. */
 export function profileRun(t: Terrain, points: readonly Vec2[]): RunProfile {
   const length = polylineLength(points);
-  if (length === 0) return { length: 0, vertical: 0, steepestGrade: 0, difficulty: 0 };
+  if (length === 0) return { length: 0, vertical: 0, steepestGrade: 0, difficulty: 0, curviness: 0 };
   const samples = Math.ceil(length / CONFIG.runs.sampleStep);
   const step = length / samples;
   const heights = Array.from({ length: samples + 1 }, (_, i) => heightAt(t, pointAlong(points, i * step)));
@@ -42,8 +51,54 @@ export function profileRun(t: Terrain, points: readonly Vec2[]): RunProfile {
   for (let i = 0; i + window <= samples; i++) {
     steepestGrade = Math.max(steepestGrade, (heights[i]! - heights[i + window]!) / (window * step));
   }
-  return { length, vertical: heights[0]! - heights[samples]!, steepestGrade, difficulty: gradeToDifficulty(steepestGrade) };
+  return { length, vertical: heights[0]! - heights[samples]!, steepestGrade, difficulty: gradeToDifficulty(steepestGrade), curviness: curviness(t, points, length) };
 }
+
+/** How much a run turns while it drops. Headings are taken every `window` metres so hand wobble doesn't count. */
+function curviness(t: Terrain, points: readonly Vec2[], length: number): number {
+  const window = CONFIG.runs.steepnessWindow;
+  const steps = Math.floor(length / window);
+  if (steps < 2) return 0;
+  const at = Array.from({ length: steps + 1 }, (_, i) => pointAlong(points, i * window));
+  let turning = 0;
+  for (let i = 2; i <= steps; i++) {
+    const a = at[i - 2]!, b = at[i - 1]!, c = at[i]!;
+    if ((heightAt(t, a) - heightAt(t, c)) / (2 * window) < CONFIG.runs.curveMinGrade) continue;
+    const turn = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+    turning += Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)));
+  }
+  return (turning / length) * 100;
+}
+
+/**
+ * Extra fun from a run's curves and features for a skier of this level, before the cap that keeps a dull
+ * run from being rescued by a jump. Skiers skip features that aren't for them, so these never hurt.
+ */
+export function featureFun(run: Run, skill: Level): number {
+  const curves = clamp(run.profile.curviness / CONFIG.runs.fullCurviness, 0, 1) * CONFIG.runs.curveFun;
+  const built = run.features.reduce((sum, f) => sum + CONFIG.features[f.type].appeal[skill], 0) * CONFIG.featureRules.funPerAppeal;
+  return Math.min(CONFIG.featureRules.maxFun, curves + built);
+}
+
+/** The feature this skier likes most on the run, or 'curves' when the shape is what they enjoyed. */
+export function favouriteFeature(run: Run, skill: Level): FeatureType | 'curves' | null {
+  const best = run.features.reduce<RunFeature | null>((b, f) => (CONFIG.features[f.type].appeal[skill] > (b ? CONFIG.features[b.type].appeal[skill] : 0) ? f : b), null);
+  if (best && CONFIG.features[best.type].appeal[skill] >= 0.5) return best.type;
+  return run.profile.curviness >= CONFIG.runs.fullCurviness / 2 ? 'curves' : null;
+}
+
+/** Why this feature can't go `at` metres down the run, or null if it can. */
+export function featureProblem(run: Run, type: FeatureType, at: number): string | null {
+  const { maxPerRun, spacing } = CONFIG.featureRules;
+  if (run.features.length >= maxPerRun) return `A run holds at most ${maxPerRun} features.`;
+  if (type === 'tunnel' && run.features.some((f) => f.type === 'tunnel')) return 'This run already has a tunnel.';
+  if (at < spacing || at > run.profile.length - spacing) return `Keep features at least ${spacing} m from the top and bottom of the run.`;
+  if (run.features.some((f) => Math.abs(f.at - at) < spacing)) return `Features need ${spacing} m of space between them.`;
+  return null;
+}
+
+export const featureUpkeep = (run: Run): number => run.features.reduce((sum, f) => sum + CONFIG.features[f.type].upkeepPerDay, 0);
+export const featureInvestment = (run: Run): number => run.features.reduce((sum, f) => sum + CONFIG.features[f.type].cost, 0);
 
 /** Why `p` can't be the next point after `prev`, or null if it can. */
 export function runPointProblem(t: Terrain, prev: Vec2 | undefined, p: Vec2): string | null {
@@ -67,7 +122,10 @@ export function runProblems(t: Terrain, points: readonly Vec2[]): string[] {
 export function funFor(run: Run, skill: Level, skiersOnRun: number, weatherFun: readonly number[] = [1, 1, 1, 1]): number {
   const gap = run.profile.difficulty - skill;
   const match = gap > 0 ? 0.4 : CONFIG.runs.belowSkillFun ** -gap;
-  return clamp(rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]!, 0, 10);
+  const base = rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]!;
+  // A skier out of their depth is too busy surviving to enjoy the berms.
+  const extra = gap > 0 ? 0 : Math.min(featureFun(run, skill), base);
+  return clamp(base + extra, 0, 10);
 }
 
 export function rateRun(run: Run, skiersOnRun: number): RunRatings {

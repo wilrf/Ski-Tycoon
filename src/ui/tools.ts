@@ -1,5 +1,5 @@
-import { CONFIG, type ApresPrice, type BuildingType, type LiftType } from '../config';
-import { dist, distToPolyline, distToSegment, type Vec2 } from '../sim/geometry';
+import { CONFIG, type ApresPrice, type BuildingType, type FeatureType, type LiftType } from '../config';
+import { dist, distToPolyline, distToSegment, projectOnPolyline, type Vec2 } from '../sim/geometry';
 import type { LiftPlan } from '../sim/lifts';
 import { runAt } from '../sim/network';
 import { runPointProblem } from '../sim/runs';
@@ -9,7 +9,8 @@ export type Tool =
   | { readonly kind: 'select' }
   | { readonly kind: 'lift'; readonly liftType: LiftType; readonly bottom: Vec2 | null; readonly top: Vec2 | null }
   | { readonly kind: 'run'; readonly points: readonly Vec2[] }
-  | { readonly kind: 'building'; readonly buildingType: BuildingType; readonly pos: Vec2 | null };
+  | { readonly kind: 'building'; readonly buildingType: BuildingType; readonly pos: Vec2 | null }
+  | { readonly kind: 'feature'; readonly runId: number; readonly featureType: FeatureType };
 
 export type Selection = { readonly kind: 'lift' | 'run' | 'skier' | 'building'; readonly id: number } | { readonly kind: 'resort' } | null;
 
@@ -22,7 +23,9 @@ export interface UiState {
   stroking: boolean;
 }
 
-export type UiAction = 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort' | 'apresPrice';
+export type UiAction =
+  | 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort'
+  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice';
 
 export const createUiState = (): UiState => ({ tool: { kind: 'select' }, selection: null, hover: null, stroking: false });
 
@@ -91,6 +94,14 @@ export function tapMap(world: World, ui: UiState, p: Vec2, hitRadius: number): s
     case 'building':
       ui.tool = { ...tool, pos: p };
       return null;
+    case 'feature': {
+      const run = activeResort(world).runs.find((r) => r.id === tool.runId);
+      if (!run) return null;
+      const spot = projectOnPolyline(p, run.points);
+      if (spot.gap > hitRadius * 1.5) return `Tap on ${run.name} to place it.`;
+      const result = applyCommand(world, { type: 'addFeature', runId: run.id, featureType: tool.featureType, at: spot.at });
+      return result.ok ? `${CONFIG.features[tool.featureType].label} built on ${run.name}.` : result.reason;
+    }
   }
 }
 
@@ -162,7 +173,14 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
       return null;
     case 'cancel':
       selectTool(ui, { kind: 'select' });
+      // Leaving the feature tool goes back to the run it was building on.
+      if (tool.kind === 'feature') ui.selection = { kind: 'run', id: tool.runId };
       return null;
+    case 'addFeature':
+      if (selection?.kind === 'run') selectTool(ui, { kind: 'feature', runId: selection.id, featureType: 'berms' });
+      return null;
+    case 'clearFeatures':
+      return selection?.kind === 'run' ? apply({ type: 'clearFeatures', runId: selection.id }, 'Features removed.') : null;
     case 'close':
       ui.selection = null;
       return null;
@@ -180,6 +198,14 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
     case 'upgrade':
       if (selection?.kind === 'building') return apply({ type: 'upgradeLodge', id: selection.id }, 'Lodge extended: more seats for lunch and après.');
       return selection?.kind === 'lift' ? apply({ type: 'upgradeLift', id: selection.id }, 'Lift upgraded.') : null;
+    case 'feature:rollers':
+    case 'feature:berms':
+    case 'feature:tunnel':
+    case 'feature:smallJump':
+    case 'feature:mediumJump':
+    case 'feature:largeJump':
+      if (tool.kind === 'feature') ui.tool = { ...tool, featureType: action.slice('feature:'.length) as FeatureType };
+      return null;
     case 'apresPrice': {
       // Cycles Low → Medium → High → Low.
       const tiers = Object.keys(CONFIG.apres.prices) as ApresPrice[];

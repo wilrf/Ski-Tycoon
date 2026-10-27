@@ -4,7 +4,7 @@ import { clamp, dist, lerp, pointAlong, type Vec2 } from './geometry';
 import { liftTier, rideSeconds, waitSeconds, type Lift } from './lifts';
 import { branchesOf, leadsSomewhere, liftsFrom, mergeOf, runsFromLift, type Mountain } from './network';
 import { nextFloat, nextRange, pickWeighted, type Rng } from './rng';
-import { funFor, rateRun, type Run } from './runs';
+import { favouriteFeature, featureFun, funFor, rateRun, type Run } from './runs';
 
 export type SkillLevel = Level;
 
@@ -17,6 +17,7 @@ export type Thought =
   | { readonly kind: 'enjoying'; readonly run: string }
   | { readonly kind: 'tooSteep'; readonly run: string }
   | { readonly kind: 'lovedRun'; readonly run: string }
+  | { readonly kind: 'lovedFeature'; readonly run: string; readonly feature: string }
   | { readonly kind: 'okRun'; readonly run: string }
   | { readonly kind: 'boredRun'; readonly run: string }
   | { readonly kind: 'survivedRun'; readonly run: string }
@@ -176,11 +177,13 @@ export function feelPrice(journal: Journal, s: Skier, price: number, time: numbe
 }
 
 /**
- * Picks a run at or below the skier's skill, favouring runs that match it exactly.
- * With nothing comfortable, a brave skier may try one level up and be scared; otherwise null.
+ * Picks a run at or below the skier's skill, favouring runs that match it exactly and runs with curves and
+ * features they like, up to twice as often. With nothing comfortable, a brave skier may try one level up and
+ * be scared; otherwise null.
  */
 export function chooseRun(runs: readonly Run[], skill: SkillLevel, rng: Rng): { run: Run; scared: boolean } | null {
-  const comfortable = pickWeighted(rng, runs, (r) => (r.profile.difficulty === skill ? 3 : r.profile.difficulty < skill ? 1 : 0));
+  const pull = (r: Run): number => 1 + featureFun(r, skill) / CONFIG.featureRules.maxFun;
+  const comfortable = pickWeighted(rng, runs, (r) => (r.profile.difficulty === skill ? 3 : r.profile.difficulty < skill ? 1 : 0) * pull(r));
   if (comfortable) return { run: comfortable, scared: false };
   const stretch = pickWeighted(rng, runs, (r) => (r.profile.difficulty === skill + 1 ? 1 : 0));
   return stretch && nextFloat(rng) < CONFIG.skiers.braveChance ? { run: stretch, scared: true } : null;
@@ -328,7 +331,9 @@ function finishRun(ctx: SkierContext, s: Skier, run: Run, scared: boolean): void
     const joy = bored ? -2 : (CONFIG.skiers.bestRunJoy * fun) / 10 - (crowded ? 3 : 0);
     feel(ctx.journal, ctx.time, s, kind, joy, run.name);
     if (run.profile.difficulty === s.skill && !crowded) s.practice++;
-    s.thought = kind === 'greatRun' ? { kind: 'lovedRun', run: run.name } : kind === 'boredRun' ? { kind: 'boredRun', run: run.name } : { kind: 'okRun', run: run.name };
+    const favourite = kind === 'greatRun' ? favouriteFeature(run, s.skill) : null;
+    s.thought = favourite ? { kind: 'lovedFeature', run: run.name, feature: favourite === 'curves' ? 'the curves' : CONFIG.features[favourite].noun }
+      : kind === 'greatRun' ? { kind: 'lovedRun', run: run.name } : kind === 'boredRun' ? { kind: 'boredRun', run: run.name } : { kind: 'okRun', run: run.name };
   }
   // A run that ends on another run carries on down it; there's no choice about that.
   const merge = mergeOf(m, run);
