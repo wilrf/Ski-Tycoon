@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { distToSegment, vec } from '../src/sim/geometry';
 import type { Run } from '../src/sim/runs';
 import type { SkillLevel } from '../src/sim/skiers';
-import { skiingPose } from '../src/render/skierMotion';
+import { skiingPose, snowPuffs } from '../src/render/skierMotion';
 import { makeRun, makeSkier, plane } from './helpers';
 
 const line = [vec(500, 100), vec(500, 700)];
@@ -49,5 +49,37 @@ describe('skiing pose', () => {
     const s = skierOn(run, 1, 50);
     s.state = { kind: 'walking', liftId: 1 };
     expect(skiingPose(s, [run], 1)).toBeNull();
+  });
+
+  describe('snow spray', () => {
+    const run = makeRun(plane(0.3), line);
+    const puffsAt = (skill: SkillLevel, d: number) => snowPuffs(skierOn(run, skill, d), [run], 1);
+
+    it('is the same every frame for the same moment', () => {
+      expect(puffsAt(1, 123.4)).toEqual(puffsAt(1, 123.4));
+    });
+
+    it('flies out from the outside of each turn and fades as the skier skis on', () => {
+      // Step down the run in small steps; every fresh puff should sit further from the run line than
+      // the skier was when they threw it, and fresh puffs should be more opaque than old ones.
+      let seen = 0;
+      for (let d = 60; d < 200; d += 0.25) {
+        const puffs = puffsAt(1, d);
+        if (puffs.length === 0) continue;
+        seen++;
+        const mean = puffs.reduce((sum, p) => sum + Math.abs(p.pos.x - 500), 0) / puffs.length;
+        expect(mean).toBeGreaterThan(2);
+        for (const p of puffs) expect(p.alpha).toBeLessThanOrEqual(0.85);
+      }
+      expect(seen).toBeGreaterThan(20);
+      // Spray is gone between turns.
+      expect(Array.from({ length: 400 }, (_, i) => puffsAt(1, 60 + i * 0.25).length).some((n) => n === 0)).toBe(true);
+    });
+
+    it('bursts around a skier landing a jump they like', () => {
+      const jumpRun: Run = { ...run, features: [{ type: 'largeJump', at: 300 }] };
+      const landed = snowPuffs(skierOn(jumpRun, 3, 300 + 24 + 0.5), [jumpRun], 1);
+      expect(landed.length).toBeGreaterThanOrEqual(12);
+    });
   });
 });
