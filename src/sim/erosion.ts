@@ -69,6 +69,56 @@ export function incise(grid: HeightGrid, strength: number, passes: number): void
   }
 }
 
+/**
+ * Fills every closed hollow up to its spill point, plus a slight tilt toward the exit, so water can drain off the map
+ * from any cell. Real land almost never holds pits; noise does. Priority-flood (Barnes et al. 2014): grow inward from
+ * the map edge, always from the lowest cell reached so far, raising any cell that sits below where it was reached from.
+ */
+export function fillPits(grid: HeightGrid, tilt = 0.01): void {
+  const { size: n, h } = grid;
+  const done = new Uint8Array(n * n);
+  // A binary min-heap of cell indices keyed on height.
+  const heap: number[] = [];
+  const less = (a: number, b: number): boolean => h[heap[a]!]! < h[heap[b]!]!;
+  const swap = (a: number, b: number): void => { [heap[a], heap[b]] = [heap[b]!, heap[a]!]; };
+  const push = (i: number): void => {
+    heap.push(i);
+    for (let k = heap.length - 1; k > 0 && less(k, (k - 1) >> 1); k = (k - 1) >> 1) swap(k, (k - 1) >> 1);
+  };
+  const pop = (): number => {
+    const top = heap[0]!, last = heap.pop()!;
+    if (heap.length) {
+      heap[0] = last;
+      for (let k = 0; ;) {
+        const l = 2 * k + 1, r = l + 1;
+        let m = k;
+        if (l < heap.length && less(l, m)) m = l;
+        if (r < heap.length && less(r, m)) m = r;
+        if (m === k) break;
+        swap(k, m);
+        k = m;
+      }
+    }
+    return top;
+  };
+  for (let i = 0; i < n * n; i++) {
+    const x = i % n, y = Math.floor(i / n);
+    if (x === 0 || y === 0 || x === n - 1 || y === n - 1) { done[i] = 1; push(i); }
+  }
+  while (heap.length) {
+    const i = pop(), x = i % n, y = Math.floor(i / n);
+    for (const [dx, dy] of NEIGHBOURS) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const j = ny * n + nx;
+      if (done[j]) continue;
+      done[j] = 1;
+      h[j] = Math.max(h[j]!, h[i]! + tilt);
+      push(j);
+    }
+  }
+}
+
 /** Soil creep: slopes relax toward their neighbours' average, rounding crests and filling hollows. */
 export function soften(grid: HeightGrid, amount: number, passes: number): void {
   const { size: n, h } = grid;

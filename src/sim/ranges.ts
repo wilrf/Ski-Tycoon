@@ -14,9 +14,9 @@ export interface RangeParams {
   readonly profile: number;
   /** 0..1 blend of folded noise: 0 gives rounded spurs, 1 knife-edge crests. */
   readonly ridged: number;
-  /** Octave gain 0.3..0.7: how much small-scale roughness survives next to the big forms. */
+  /** Octave gain 0.3..0.7: how much roughness at 90-350 m survives next to the ~700 m spurs and valleys. */
   readonly gain: number;
-  /** Amplitude of the noise the erosion starts from, as a share of relief. */
+  /** Height of the spurs and valleys the erosion starts from, as a share of relief. */
   readonly spurs: number;
   /** Strength of river and gully cutting: higher carves a deeper, denser drainage network. */
   readonly incision: number;

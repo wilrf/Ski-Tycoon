@@ -18,6 +18,7 @@ import { createMenus, type MenuChoice } from './ui/menu';
 import { createPanel, describePanel } from './ui/panel';
 import { mountIcons } from './ui/icons';
 import { createToast } from './ui/toast';
+import { linkedSite } from './ui/site';
 import { createToolbar, toolFor } from './ui/toolbar';
 import { createUiState, runAction, selectTool, strokeEnd, strokeMove, strokeStart, tapMap, type UiAction } from './ui/tools';
 
@@ -44,11 +45,18 @@ function loadSaved(): World | null {
   return result?.ok ? result.world : null;
 }
 
-// ?seed=123 starts a fresh game on that mountain, so a mountain can be shared by link.
-const seedParam = new URLSearchParams(location.search).get('seed');
+// ?seed=123 starts a fresh game on that mountain, so a mountain can be shared by link. ?range=alps or
+// ?peak=matterhorn starts one in a range's character or on a real peak; new mountains then stay there.
+const params = new URLSearchParams(location.search);
+const seedParam = params.get('seed');
+const linked = await linkedSite(params);
+if (linked && 'error' in linked) toast(linked.error, 6);
+const makeSite = linked && 'make' in linked ? linked.make : null;
+const newWorld = (seed: number): World => (makeSite ? createWorld(seed, makeSite(seed)) : createWorld(seed));
 const randomSeed = (): number => Date.now() % 1e9;
-const saved = seedParam ? null : loadSaved();
-let world = seedParam ? createWorld(Number(seedParam) || 0) : (saved ?? createWorld(randomSeed()));
+const fresh = seedParam !== null || makeSite !== null;
+const saved = fresh ? null : loadSaved();
+let world = fresh ? newWorld(seedParam ? Number(seedParam) || 0 : randomSeed()) : (saved ?? newWorld(randomSeed()));
 let terrain = bakeTerrain(activeResort(world));
 const extent = (): number => terrainExtent(activeResort(world).terrain);
 const camera = fitCamera(extent(), view);
@@ -102,7 +110,7 @@ function menu(command: MenuCommand): void {
 
 // A new mountain waits for P, so there's time to look around and plan the first lift.
 function newMountain(fresh: boolean): void {
-  if (fresh) startWorld(createWorld(randomSeed()));
+  if (fresh) startWorld(newWorld(randomSeed()));
   speedIndex = speedBeforeMenu = 0;
   toast('Your mountain is paused. Press P (or ▶) to start the day.', 6);
 }
@@ -226,7 +234,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && store) saveGame(store, world);
 });
 resize();
-if (seedParam) newMountain(false);
+if (fresh) newMountain(false);
 else {
   speedIndex = 0;
   menus.showStart(saved !== null);

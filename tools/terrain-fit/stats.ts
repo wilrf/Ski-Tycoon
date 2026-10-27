@@ -12,7 +12,7 @@ export interface Grid {
   readonly z: Float64Array;
 }
 
-export const STAT_NAMES = ['relief_m', 'slope_mean_deg', 'slope_p90_deg', 'frac_gt30', 'frac_gt45', 'upland_flat', 'fine_coarse', 'gully_per_km', 'crest_curv'] as const;
+export const STAT_NAMES = ['relief_m', 'slope_mean_deg', 'slope_p90_deg', 'frac_gt30', 'frac_gt45', 'upland_flat', 'fine_coarse', 'mid_broad', 'gully_per_km', 'crest_curv'] as const;
 export type StatName = (typeof STAT_NAMES)[number];
 export type Stats = Record<StatName, number>;
 
@@ -21,7 +21,11 @@ export function blur(g: Grid, sigma: number): Grid {
   const r = Math.ceil(3 * sigma);
   const k = Array.from({ length: 2 * r + 1 }, (_, i) => Math.exp(-((i - r) ** 2) / (2 * sigma * sigma)));
   const ksum = k.reduce((a, b) => a + b, 0);
-  const mirror = (i: number, n: number): number => (i < 0 ? -i - 1 : i >= n ? 2 * n - i - 1 : i);
+  // Reflects any index back into [0, n), however far out; wide blurs on small windows reach past one reflection.
+  const mirror = (i: number, n: number): number => {
+    const m = ((i % (2 * n)) + 2 * n) % (2 * n);
+    return m < n ? m : 2 * n - 1 - m;
+  };
   const pass = (src: Float64Array, horizontal: boolean): Float64Array => {
     const out = new Float64Array(src.length);
     for (let y = 0; y < g.hgt; y++)
@@ -75,8 +79,9 @@ export function measure(g: Grid): Stats {
   const s = slopes(g);
   const zHigh = quantile(g.z, 0.7);
   const high = Array.from(s).filter((_, i) => g.z[i]! > zHigh);
-  const b1 = blur(g, 1).z, b3 = blur(g, 3).z, b8 = blur(g, 8).z;
-  const fine = b1.map((v, i) => v - b3[i]!), coarse = b3.map((v, i) => v - b8[i]!);
+  const b1 = blur(g, 1).z, b3 = blur(g, 3).z, b8 = blur(g, 8).z, b24 = blur(g, 24).z;
+  // Relief in three wavebands: 30-90 m, 90-240 m, 240-720 m. Real faces at this size are mostly big forms.
+  const fine = b1.map((v, i) => v - b3[i]!), coarse = b3.map((v, i) => v - b8[i]!), broad = b8.map((v, i) => v - b24[i]!);
   // Curvature of the lightly smoothed surface; the most convex 2% of cells are the crests.
   const curv = Float64Array.from({ length: g.z.length }, (_, i) => {
     const x = i % g.w, y = Math.floor(i / g.w);
@@ -91,6 +96,7 @@ export function measure(g: Grid): Stats {
     frac_gt45: mean(s.map((v) => +(v > 45))),
     upland_flat: mean(high.map((v) => +(v < 15))),
     fine_coarse: std(fine) / Math.max(std(coarse), 1e-6),
+    mid_broad: std(coarse) / Math.max(std(broad), 1e-6),
     gully_per_km: gullyCrossings(g),
     crest_curv: -quantile(curv, 0.02) * 1000,
   };

@@ -22,8 +22,8 @@ const SEEDS = [11, 22, 33];
 const RANDOM = 100, MAX_EVALS = 400;
 
 const BOUNDS: Record<keyof RangeParams, readonly [number, number]> = {
-  relief: [150, 1400], profile: [0.7, 2.5], ridged: [0, 1], gain: [0.3, 0.7], spurs: [0, 0.5],
-  incision: [0, 6], creep: [0, 0.5], talus: [25, 60], bench: [0, 1],
+  relief: [150, 1400], profile: [0.7, 2.5], ridged: [0, 1], gain: [0.3, 0.7], spurs: [0, 1],
+  incision: [0, 8], creep: [0, 0.5], talus: [25, 60], bench: [0, 1],
 };
 const KNOBS = Object.keys(BOUNDS) as (keyof RangeParams)[];
 

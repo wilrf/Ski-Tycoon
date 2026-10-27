@@ -31,6 +31,10 @@
     "mean": 0.3462,
     "sd": 0.0449
    },
+   "mid_broad": {
+    "mean": 0.3653,
+    "sd": 0.1003
+   },
    "gully_per_km": {
     "mean": 1.7994,
     "sd": 0.2746
@@ -72,6 +76,10 @@
    "fine_coarse": {
     "mean": 0.3521,
     "sd": 0.0507
+   },
+   "mid_broad": {
+    "mean": 0.4094,
+    "sd": 0.1151
    },
    "gully_per_km": {
     "mean": 1.7966,
@@ -115,6 +123,10 @@
     "mean": 0.3465,
     "sd": 0.044
    },
+   "mid_broad": {
+    "mean": 0.3464,
+    "sd": 0.0861
+   },
    "gully_per_km": {
     "mean": 1.8124,
     "sd": 0.2862
@@ -156,6 +168,10 @@
    "fine_coarse": {
     "mean": 0.3429,
     "sd": 0.0412
+   },
+   "mid_broad": {
+    "mean": 0.3689,
+    "sd": 0.096
    },
    "gully_per_km": {
     "mean": 1.8042,
@@ -199,6 +215,10 @@
     "mean": 0.3446,
     "sd": 0.0466
    },
+   "mid_broad": {
+    "mean": 0.3872,
+    "sd": 0.1118
+   },
    "gully_per_km": {
     "mean": 1.7523,
     "sd": 0.279
@@ -240,6 +260,10 @@
    "fine_coarse": {
     "mean": 0.3286,
     "sd": 0.0403
+   },
+   "mid_broad": {
+    "mean": 0.3476,
+    "sd": 0.0938
    },
    "gully_per_km": {
     "mean": 1.6976,
@@ -283,6 +307,10 @@
     "mean": 0.3638,
     "sd": 0.0592
    },
+   "mid_broad": {
+    "mean": 0.426,
+    "sd": 0.1324
+   },
    "gully_per_km": {
     "mean": 1.8257,
     "sd": 0.3185
@@ -324,6 +352,10 @@
    "fine_coarse": {
     "mean": 0.4018,
     "sd": 0.0641
+   },
+   "mid_broad": {
+    "mean": 0.4638,
+    "sd": 0.115
    },
    "gully_per_km": {
     "mean": 2.0492,
@@ -367,6 +399,10 @@
     "mean": 0.3949,
     "sd": 0.0534
    },
+   "mid_broad": {
+    "mean": 0.427,
+    "sd": 0.1034
+   },
    "gully_per_km": {
     "mean": 2.0539,
     "sd": 0.2395
@@ -408,6 +444,10 @@
    "fine_coarse": {
     "mean": 0.4346,
     "sd": 0.0803
+   },
+   "mid_broad": {
+    "mean": 0.4624,
+    "sd": 0.1326
    },
    "gully_per_km": {
     "mean": 2.1281,
