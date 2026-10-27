@@ -1,4 +1,4 @@
-import { CONFIG, type BuildingType } from '../config';
+import { CONFIG, type BuildingPart, type BuildingPartLevel, type BuildingType } from '../config';
 import { dist, type Vec2 } from './geometry';
 import type { Lift } from './lifts';
 import { isBase, type Mountain } from './network';
@@ -12,15 +12,37 @@ export interface Building {
   readonly pos: Vec2;
   /** How many of CONFIG.lodgeUpgrades a lodge has had built onto it, in order. Huts don't grow. */
   upgrades: number;
+  /** Levels owned of each CONFIG.buildingParts entry; missing on older saves. */
+  parts?: Partial<Record<BuildingPart, number>>;
 }
 
-/** Seats for lunch and après, including every extension built so far. */
+/** The levels a building of this type can add for the part, or none. */
+export const partLevelsFor = (type: BuildingType, part: BuildingPart): readonly BuildingPartLevel[] =>
+  (CONFIG.buildingParts[type] as Partial<Record<BuildingPart, readonly BuildingPartLevel[]>>)[part] ?? [];
+
+export const buildingPartsFor = (type: BuildingType): BuildingPart[] =>
+  (['kitchen', 'terrace'] as const).filter((p) => partLevelsFor(type, p).length > 0);
+
+/** Every part level built so far, in order. */
+const ownedParts = (b: Building): BuildingPartLevel[] =>
+  buildingPartsFor(b.type).flatMap((p) => partLevelsFor(b.type, p).slice(0, b.parts?.[p] ?? 0));
+
+export const nextBuildingPart = (b: Building, part: BuildingPart): BuildingPartLevel | undefined =>
+  partLevelsFor(b.type, part)[b.parts?.[part] ?? 0];
+
+/** Seats for lunch and après, including every extension and terrace built so far. */
 export const seatsOf = (b: Building): number =>
-  CONFIG.buildings[b.type].seats + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.seats, 0);
+  CONFIG.buildings[b.type].seats + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.seats, 0) +
+  ownedParts(b).reduce((sum, p) => sum + (p.seats ?? 0), 0);
+
+/** What a meal costs here, and how much happier it leaves a skier, after kitchen upgrades. */
+export const mealPriceOf = (b: Building): number => CONFIG.buildings[b.type].mealPrice + ownedParts(b).reduce((sum, p) => sum + (p.mealPrice ?? 0), 0);
+export const mealJoyOf = (b: Building): number => CONFIG.meals.joy + ownedParts(b).reduce((sum, p) => sum + (p.mealJoy ?? 0), 0);
 
 /** Everything spent on a building: its own price plus its extensions. */
 export const buildingInvested = (b: Building): number =>
-  CONFIG.buildings[b.type].cost + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.cost, 0);
+  CONFIG.buildings[b.type].cost + CONFIG.lodgeUpgrades.slice(0, b.upgrades).reduce((sum, u) => sum + u.cost, 0) +
+  ownedParts(b).reduce((sum, p) => sum + p.cost, 0);
 
 /** The next extension a lodge can have, or undefined for a hut or a lodge that's fully built out. */
 export const nextLodgeUpgrade = (b: Building) => (b.type === 'lodge' ? CONFIG.lodgeUpgrades[b.upgrades] : undefined);

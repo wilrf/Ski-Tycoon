@@ -44,7 +44,7 @@ describe('world', () => {
     if (ended?.type !== 'dayEnded') throw new Error('The day never ended.');
     expect(ended.stats.arrivals).toBeGreaterThan(100);
     expect(ended.ledger.tickets).toBe(ended.stats.arrivals * CONFIG.economy.fairTicketPrice);
-    expect(world.company.money).toBe(afterBuild + ended.ledger.tickets + ended.ledger.food + ended.ledger.bonuses);
+    expect(world.company.money).toBe(afterBuild + ended.ledger.tickets + ended.ledger.food + ended.ledger.bonuses - ended.ledger.upkeep);
     expect(peak).toBeGreaterThan(0);
     expect(activeResort(world).skiers).toEqual([]);
   });

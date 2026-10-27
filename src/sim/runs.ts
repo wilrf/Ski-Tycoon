@@ -1,4 +1,4 @@
-import { CONFIG, type FeatureType, type Level, type Skill } from '../config';
+import { CONFIG, type FeatureType, type Grooming, type Level, type Skill } from '../config';
 import { clamp, pointAlong, polylineLength, type Vec2 } from './geometry';
 import { heightAt, inBounds, type Terrain } from './terrain';
 
@@ -28,6 +28,42 @@ export interface Run {
   readonly points: readonly Vec2[];
   readonly profile: RunProfile;
   features: RunFeature[];
+  /** Missing on runs from older saves, which are groomed every night with fresh corduroy and no widening. */
+  grooming?: Grooming;
+  /** Snow condition: 1 is fresh corduroy, falling as skiers scrape it off. */
+  snow?: number;
+  /** How many of CONFIG.widening have been cut. */
+  widened?: number;
+}
+
+export const groomingOf = (run: Run): Grooming => run.grooming ?? 'nightly';
+export const snowOf = (run: Run): number => run.snow ?? 1;
+/** How much more room than a standard trail the run has, from widening. */
+export const roomOf = (run: Run): number => (run.widened ? CONFIG.widening[run.widened - 1]!.room : 1);
+export const nextWidening = (run: Run) => CONFIG.widening[run.widened ?? 0];
+export const wideningCost = (run: Run): number | undefined => {
+  const next = nextWidening(run);
+  return next && Math.round((next.costPer100m * run.profile.length) / 100);
+};
+
+/** Whether the cats groom this run tonight. Every-other-night runs alternate, staggered by run. */
+export const groomedTonight = (run: Run, day: number): boolean =>
+  CONFIG.grooming.plans[groomingOf(run)].nights >= 1 || (groomingOf(run) === 'alternate' && (day + run.id) % 2 === 0);
+
+/** One night of grooming, with a winch cat on the steep runs. */
+export const groomingCost = (run: Run): number =>
+  Math.round((CONFIG.grooming.costPer100m * run.profile.length) / 100 * (run.profile.difficulty >= 2 ? CONFIG.grooming.winchFactor : 1));
+
+/** A skier coming down scrapes a little corduroy off, spread over the run's length. */
+export function wearRun(run: Run): void {
+  const { wearPerSkier, roughest } = CONFIG.grooming;
+  run.snow = Math.max(roughest, snowOf(run) - (wearPerSkier * 100) / Math.max(100, run.profile.length));
+}
+
+/** How a skier of this level likes the snow: fresh corduroy is 1, and only pros prefer the bumps. */
+export function snowFun(run: Run, skill: Skill): number {
+  const rough = CONFIG.grooming.roughFun[skill];
+  return rough + (1 - rough) * snowOf(run);
 }
 
 /** Each rating is 0 to 10. */
@@ -125,7 +161,7 @@ export function runProblems(t: Terrain, points: readonly Vec2[]): string[] {
 export function funFor(run: Run, skill: Skill, skiersOnRun: number, weatherFun: readonly number[] = [1, 1, 1, 1]): number {
   const gap = run.profile.difficulty - runLevel(skill);
   const match = gap > 0 ? 0.4 : CONFIG.runs.belowSkillFun ** -gap;
-  const base = rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]!;
+  const base = rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]! * snowFun(run, skill);
   // A skier out of their depth is too busy surviving to enjoy the berms.
   const extra = gap > 0 ? 0 : Math.min(featureFun(run, skill), base);
   return clamp(base + extra, 0, 10);
@@ -133,8 +169,8 @@ export function funFor(run: Run, skill: Skill, skiersOnRun: number, weatherFun: 
 
 export function rateRun(run: Run, skiersOnRun: number): RunRatings {
   const { length, vertical, steepestGrade } = run.profile;
-  // Five skiers per 100 m of trail is busy; ten is shoulder to shoulder.
-  const crowding = clamp(skiersOnRun / Math.max(1, length / 100), 0, 10);
+  // Five skiers per 100 m of trail is busy; ten is shoulder to shoulder. A widened trail fits more.
+  const crowding = clamp(skiersOnRun / Math.max(1, (length / 100) * roomOf(run)), 0, 10);
   return {
     fun: clamp(2 + Math.min(5, vertical / 60) + Math.min(3, length / 400) - crowding * 0.3, 0, 10),
     difficulty: clamp((steepestGrade / 0.8) * 10, 0, 10),

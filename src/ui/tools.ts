@@ -1,8 +1,8 @@
-import { CONFIG, type ApresPrice, type BuildingType, type FeatureType, type LiftType } from '../config';
+import { CONFIG, type ApresPrice, type BuildingPart, type BuildingType, type FeatureType, type Grooming, type LiftType } from '../config';
 import { dist, distToPolyline, distToSegment, projectOnPolyline, type Vec2 } from '../sim/geometry';
 import type { LiftPart, LiftPlan } from '../sim/lifts';
 import { runAt } from '../sim/network';
-import { runPointProblem } from '../sim/runs';
+import { groomingOf, runPointProblem } from '../sim/runs';
 import { activeResort, applyCommand, planLiftHere, runEndAt, runProblemsHere, runStartAt, type Command, type World } from '../sim/world';
 
 export type Tool =
@@ -32,7 +32,8 @@ export interface UiState {
 
 export type UiAction =
   | 'confirm' | 'cancel' | 'undoPoint' | 'remove' | 'close' | 'upgrade' | 'priceUp' | 'priceDown' | 'buyLand' | 'resort'
-  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice' | `tab:${ResortTab}` | `liftTab:${'info' | 'upgrades'}` | `part:${LiftPart}`;
+  | 'addFeature' | 'clearFeatures' | `feature:${FeatureType}` | 'apresPrice' | `tab:${ResortTab}` | `liftTab:${'info' | 'upgrades'}` | `part:${LiftPart}`
+  | 'grooming' | 'widen' | `building:${BuildingPart}`;
 
 export const createUiState = (): UiState => ({ tool: { kind: 'select' }, resortTab: 'overview', liftTab: 'info', selection: null, hover: null, stroking: false });
 
@@ -239,6 +240,21 @@ export function runAction(world: World, ui: UiState, action: UiAction): string |
       const part = action.slice('part:'.length) as LiftPart;
       return apply({ type: 'upgradeLiftPart', id: selection.id, part }, `${CONFIG.liftParts[part].label} upgraded.`);
     }
+    case 'grooming': {
+      // Cycles every night → every other night → not groomed.
+      const run = selection?.kind === 'run' ? resort.runs.find((r) => r.id === selection.id) : undefined;
+      if (!run) return null;
+      const plans = ['nightly', 'alternate', 'none'] as const satisfies readonly Grooming[];
+      const grooming = plans[(plans.indexOf(groomingOf(run)) + 1) % plans.length]!;
+      return apply({ type: 'setGrooming', runId: run.id, grooming }, `Grooming: ${CONFIG.grooming.plans[grooming].label.toLowerCase()}.`);
+    }
+    case 'widen':
+      return selection?.kind === 'run' ? apply({ type: 'widenRun', runId: selection.id }, 'Trail widened: more room for skiers.') : null;
+    case 'building:kitchen':
+    case 'building:terrace':
+      return selection?.kind === 'building'
+        ? apply({ type: 'upgradeBuildingPart', id: selection.id, part: action.slice('building:'.length) as BuildingPart }, 'Built.')
+        : null;
     case 'apresPrice': {
       // Cycles Low → Medium → High → Low.
       const tiers = Object.keys(CONFIG.apres.prices) as ApresPrice[];

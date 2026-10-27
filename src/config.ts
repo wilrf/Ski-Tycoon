@@ -83,6 +83,20 @@ export interface LodgeUpgrade {
   readonly seats: number;
 }
 
+export type Grooming = 'none' | 'alternate' | 'nightly';
+
+/** Something a lodge or hut can add, one level at a time: a better kitchen or more seats outside. */
+export interface BuildingPartLevel {
+  readonly name: string;
+  readonly cost: number;
+  readonly stars: number;
+  readonly mealPrice?: number;
+  readonly mealJoy?: number;
+  readonly seats?: number;
+}
+
+export type BuildingPart = 'kitchen' | 'terrace';
+
 export interface BuildingSpec {
   readonly label: string;
   readonly cost: number;
@@ -154,6 +168,51 @@ export const CONFIG = {
     mediumJump: { label: 'Medium jump', noun: 'the medium jump', cost: 25_000, upkeepPerDay: 450, appeal: [0, 0.3, 1, 0.6, 0.4] },
     largeJump: { label: 'Large jump', noun: 'the large jump', cost: 50_000, upkeepPerDay: 800, appeal: [0, 0, 0.4, 1, 1] },
   } satisfies Record<FeatureType, FeatureSpec>,
+  /**
+   * Snowcats groom runs overnight into corduroy, which skiers scrape off through the day. Beginners and
+   * intermediates want it groomed; experts and pros like the bumps an ungroomed run grows. Steep runs need a
+   * winch cat, as at real resorts, which is slower and dearer. Prices are game dollars, like the lifts.
+   */
+  grooming: {
+    /** What one night costs per 100 m of run, and how much more a winch cat costs on black and double black. */
+    costPer100m: 15,
+    winchFactor: 2.5,
+    /** Snow condition lost each time a skier comes down 100 m of run; 1 is fresh corduroy, 0 is skied out. */
+    wearPerSkier: 0.004,
+    /** Ungroomed snow never gets worse than this: it settles into moguls instead. */
+    roughest: 0.2,
+    /** How a skier likes a skied-out run compared with fresh corduroy, by skill. Pros enjoy the bumps. */
+    roughFun: [0.55, 0.75, 0.95, 1.1, 1.1] satisfies PerSkill,
+    plans: {
+      none: { label: 'Not groomed', nights: 0 },
+      alternate: { label: 'Every other night', nights: 0.5 },
+      nightly: { label: 'Every night', nights: 1 },
+    } satisfies Record<Grooming, { label: string; nights: number }>,
+  },
+  /** Widening cuts trees beside the run so the same skiers have more room; each level is paid per 100 m. */
+  widening: [
+    { name: 'Widen trail', costPer100m: 3_000, stars: 0, room: 1.4 },
+    { name: 'Open it into a boulevard', costPer100m: 6_000, stars: 2, room: 1.8 },
+  ],
+  /**
+   * Better food sells for more and leaves skiers happier, as with a food court in a base lodge or table
+   * service at a famous mountain restaurant. Huts can also add an outdoor terrace for sunny days.
+   */
+  buildingParts: {
+    lodge: {
+      kitchen: [
+        { name: 'Food court', cost: 50_000, stars: 1, mealPrice: 4, mealJoy: 2 },
+        { name: 'Sit-down restaurant', cost: 120_000, stars: 3, mealPrice: 9, mealJoy: 4 },
+      ],
+    },
+    hut: {
+      kitchen: [
+        { name: 'Table service', cost: 60_000, stars: 2, mealPrice: 6, mealJoy: 3 },
+        { name: 'Gourmet menu', cost: 150_000, stars: 4, mealPrice: 16, mealJoy: 5 },
+      ],
+      terrace: [{ name: 'Sun terrace', cost: 50_000, stars: 2, seats: 40 }],
+    },
+  } satisfies Record<BuildingType, Partial<Record<BuildingPart, readonly BuildingPartLevel[]>>>,
   featureRules: {
     maxPerRun: 4,
     /** Metres between features, and from either end of the run. */
