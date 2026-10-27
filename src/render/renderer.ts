@@ -132,12 +132,28 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   }
 
   // Previews for the active build tool.
-  const plan = pendingLiftPlan(world, ui);
-  if (plan) {
-    drawLift(plan, false, plan.problems.length > 0);
-    tag(ctx, at(plan.top), `${Math.round(plan.length)} m · ↑${Math.round(plan.rise)} m · $${plan.cost.toLocaleString('en-US')}`);
+  if (ui.tool.kind === 'lift') {
+    // The longest lift of this type the company can pay for, so the player knows their reach before committing.
+    const spec = CONFIG.lifts[ui.tool.liftType];
+    const reach = Math.min(spec.maxLength, Math.max(0, (world.company.money - spec.baseCost) / spec.costPerMetre));
+    const affordable = reach >= CONFIG.liftRules.minLength;
+    const { bottom } = ui.tool;
+    if (bottom && affordable) {
+      const c = at(bottom);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, reach * camera.zoom, 0, Math.PI * 2);
+      stroke('rgba(255, 255, 255, 0.85)', 2, [8, 6]);
+    }
+    const plan = pendingLiftPlan(world, ui);
+    if (plan) {
+      drawLift(plan, false, plan.problems.length > 0);
+      tag(ctx, at(plan.top), `${Math.round(plan.length)} m · ↑${Math.round(plan.rise)} m · $${plan.cost.toLocaleString('en-US')}`, plan.cost > world.company.money);
+    } else if (ui.hover || bottom) {
+      const where = at(ui.hover ?? bottom!);
+      tag(ctx, where, affordable ? `${spec.label}: up to ${Math.round(reach)} m for $${Math.floor(world.company.money).toLocaleString('en-US')}` : `Can't afford a ${spec.label.toLowerCase()} yet`, !affordable);
+    }
+    if (bottom) marker(ctx, at(bottom), LIFT_COLORS[ui.tool.liftType]);
   }
-  if (ui.tool.kind === 'lift' && ui.tool.bottom) marker(ctx, at(ui.tool.bottom), LIFT_COLORS[ui.tool.liftType]);
   const runPoints = pendingRunPoints(world, ui);
   if (runPoints.length > 0) {
     const profile = profileRun(resort.terrain, runPoints);
@@ -274,11 +290,11 @@ function marker(ctx: CanvasRenderingContext2D, p: Vec2, color: string): void {
   ctx.stroke();
 }
 
-/** A dark rounded tag for build previews. */
-function tag(ctx: CanvasRenderingContext2D, p: Vec2, text: string): void {
+/** A dark rounded tag for build previews; red when it carries a warning. */
+function tag(ctx: CanvasRenderingContext2D, p: Vec2, text: string, warning = false): void {
   ctx.font = `700 12px ${UI_FONT}`;
   const w = ctx.measureText(text).width + 12;
-  ctx.fillStyle = 'rgba(23, 35, 61, 0.9)';
+  ctx.fillStyle = warning ? 'rgba(180, 35, 50, 0.92)' : 'rgba(23, 35, 61, 0.9)';
   ctx.beginPath();
   ctx.roundRect(p.x + 10, p.y - 24, w, 22, 11);
   ctx.fill();
