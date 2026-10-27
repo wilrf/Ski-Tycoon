@@ -56,12 +56,24 @@ export function runProblems(t: Terrain, points: readonly Vec2[]): string[] {
   if (points.length < 2) return ['A run needs at least two points.'];
   const problems = points.map((p, i) => runPointProblem(t, points[i - 1], p)).filter((p): p is string => p !== null);
   if (polylineLength(points) < CONFIG.runs.minLength) problems.push(`Runs must be at least ${CONFIG.runs.minLength} m long.`);
+  else if (heightAt(t, points[0]!) - heightAt(t, points[points.length - 1]!) < CONFIG.runs.minVertical) problems.push(`Runs need at least ${CONFIG.runs.minVertical} m of vertical drop.`);
   return problems;
+}
+
+/**
+ * How much a skier of this level enjoys the run, 0 to 10. A run at their level is the most fun; each level
+ * below it is duller (experts get bored on greens), and a run above it is mostly fear.
+ */
+export function funFor(run: Run, skill: Level, skiersOnRun: number, weatherFun: readonly number[] = [1, 1, 1, 1]): number {
+  const gap = run.profile.difficulty - skill;
+  const match = gap > 0 ? 0.4 : CONFIG.runs.belowSkillFun ** -gap;
+  return clamp(rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]!, 0, 10);
 }
 
 export function rateRun(run: Run, skiersOnRun: number): RunRatings {
   const { length, vertical, steepestGrade } = run.profile;
-  const crowding = clamp((skiersOnRun / Math.max(1, length / 100)) * 2.5, 0, 10);
+  // Five skiers per 100 m of trail is busy; ten is shoulder to shoulder.
+  const crowding = clamp(skiersOnRun / Math.max(1, length / 100), 0, 10);
   return {
     fun: clamp(2 + Math.min(5, vertical / 60) + Math.min(3, length / 400) - crowding * 0.3, 0, 10),
     difficulty: clamp((steepestGrade / 0.8) * 10, 0, 10),

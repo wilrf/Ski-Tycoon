@@ -1,12 +1,14 @@
 import { CONFIG } from '../config';
-import { dist } from '../sim/geometry';
-import { liftCost, rideSeconds, waitSeconds } from '../sim/lifts';
-import { isBase, leadsSomewhere, liftsFrom, runsFromLift } from '../sim/network';
-import { profileRun, rateRun, runProblems } from '../sim/runs';
-import { activeResort, type World } from '../sim/world';
+import { income } from '../sim/economy';
+import { liftCapacity, liftTier, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
+import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
+import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
+import { funFor, profileRun, rateRun } from '../sim/runs';
+import { weatherSpec } from '../sim/weather';
+import { activeResort, affordableLength, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
-import { activityText, DIFFICULTY_NAMES, grade, metres, minutes, money, outOfTen, percent, SKILL_NAMES, thoughtText } from './format';
-import { pendingLiftPlan, type UiAction, type UiState } from './tools';
+import { activityText, DIFFICULTY_NAMES, FEELING_EMOJI, feelingText, grade, metres, minutes, money, outOfTen, percent, requestTitle, SKILL_NAMES, stars, tallyText, thoughtText, weatherText } from './format';
+import { pendingLiftPlan, runStartsConnected, type UiAction, type UiState } from './tools';
 
 export interface PanelButton {
   readonly label: string;
@@ -34,13 +36,18 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
   if (tool.kind === 'lift') {
     const spec = CONFIG.lifts[tool.liftType];
     const plan = pendingLiftPlan(world, ui);
+    const stars = CONFIG.liftStars[tool.liftType];
+    const locked = world.company.stars < stars;
     const specRows = [
       ['Speed', `${spec.speed} m/s`],
       ['Capacity', `${spec.capacityPerHour.toLocaleString('en-US')} skiers/hour`],
       ['Max length', metres(spec.maxLength)],
+      ['You can afford', metres(affordableLength(world, tool.liftType))],
     ] as const;
     if (!plan) {
-      return { title: spec.label, rows: specRows, note: tool.bottom ? 'Tap where the top station goes.' : 'Tap where the bottom station goes.', actions: [CANCEL] };
+      const note = locked ? `Unlocks when a ${CONFIG.review.magazine} review gives you ${stars}★.`
+        : tool.bottom ? 'Tap where the top station goes.' : 'Tap where the bottom station goes.';
+      return { title: spec.label, rows: specRows, note, actions: [CANCEL] };
     }
     return {
       title: spec.label,
@@ -56,18 +63,30 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     };
   }
 
+  if (tool.kind === 'building') {
+    const spec = CONFIG.buildings[tool.buildingType];
+    const problems = tool.pos ? buildingProblemsHere(world, tool.buildingType, tool.pos) : [];
+    const where = tool.buildingType === 'lodge' ? 'in the flat base area' : 'next to a lift’s top station';
+    return {
+      title: spec.label,
+      rows: [['Cost', money(spec.cost)], ['Seats', String(spec.seats)], ['Meal price', money(spec.mealPrice)]],
+      note: world.company.stars < spec.stars ? `Unlocks at ${spec.stars}★.` : !tool.pos ? `Tap ${where}. Hungry and tired skiers stop in to eat and rest.` : problems.join(' ') || 'Ready to build.',
+      actions: [{ label: `Build for ${money(spec.cost)}`, action: 'confirm', primary: true, disabled: !tool.pos || problems.length > 0 }, CANCEL],
+    };
+  }
+
   if (tool.kind === 'run') {
     const { points } = tool;
     const profile = profileRun(resort.terrain, points);
     const start = points[0], end = points[points.length - 1];
-    const startsAtLift = start && resort.lifts.some((l) => dist(l.top, start) <= CONFIG.network.connectRadius);
-    const endsSomewhere = end && (isBase(resort, end) || liftsFrom(resort, end).length > 0);
-    const problems = runProblems(resort.terrain, points);
+    const startsConnected = runStartsConnected(world, start);
+    const endsSomewhere = end && runEndAt(world, end) !== null;
+    const problems = runProblemsHere(world, points);
     const hint =
-      points.length === 0 ? 'Tap near a lift’s top station to start the run, then tap points down the mountain.'
-      : !startsAtLift ? 'This run doesn’t start at a lift top, so nobody will find it.'
-      : points.length > 1 && !endsSomewhere ? 'This run ends nowhere. Finish it at a lift’s bottom station or the base.'
-      : 'Keep tapping downhill, then finish.';
+      points.length === 0 ? 'Drag down the mountain from a lift’s top station, or from another run, to paint a run. The slope colours show how steep the ground is.'
+      : !startsConnected ? 'This run doesn’t start at a lift top or on another run, so nobody will find it.'
+      : points.length > 1 && !endsSomewhere ? 'Keep going down to a lift’s bottom station, the base, or another run.'
+      : problems[0] ?? 'Looks good. Finish it, or keep adding points.';
     return {
       title: 'New run',
       accent: points.length > 1 ? LEVEL_COLORS[profile.difficulty] : undefined,
@@ -79,26 +98,36 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     };
   }
 
+  if (selection?.kind === 'resort') return describeResort(world);
+
   if (selection?.kind === 'lift') {
     const lift = resort.lifts.find((l) => l.id === selection.id);
     if (!lift) return null;
-    const spec = CONFIG.lifts[lift.type];
     const runs = runsFromLift(resort, lift);
+    const next = nextTier(lift);
+    const problem = upgradeProblem(world, lift);
+    const held = heldLifts(world, resort).has(lift.id);
     return {
       title: lift.name,
       rows: [
-        ['Type', spec.label],
+        ['Type', liftTier(lift).name],
         ['Length', metres(lift.length)],
         ['Vertical rise', metres(lift.rise)],
         ['Ride time', minutes(rideSeconds(lift))],
-        ['Capacity', `${spec.capacityPerHour.toLocaleString('en-US')} skiers/hour`],
+        ['Capacity', `${Math.round(liftCapacity(lift)).toLocaleString('en-US')} skiers/hour`],
         ['In line', `${lift.queue.length} (wait ${minutes(waitSeconds(lift))})`],
         ['Riding', String(resort.skiers.filter((s) => s.state.kind === 'riding' && s.state.liftId === lift.id).length)],
         ['Runs from the top', runs.length === 0 ? 'None yet' : runs.map((r) => r.name).join(', ')],
-        ['Upkeep', `${money(spec.upkeepPerDay)}/day (from Milestone 2)`],
+        ...(next ? [['Next upgrade', `${next.name}: ${Math.round(CONFIG.lifts[lift.type].speed * next.speedFactor * 10) / 10} m/s, ${Math.round(CONFIG.lifts[lift.type].capacityPerHour * next.capacityFactor).toLocaleString('en-US')}/hour`] as const] : []),
       ],
-      note: runs.length === 0 ? 'Draw a run from the top station so skiers have somewhere to go.' : undefined,
-      actions: [{ label: `Remove (refund ${money(liftCost(lift.type, lift.length) * CONFIG.economy.removalRefund)})`, action: 'remove' }, CLOSE],
+      note: held ? 'Stopped on wind hold. Covered seats (bubble chairs and gondolas) keep running in storms.'
+        : runs.length === 0 ? 'Draw a run from the top station so skiers have somewhere to go.'
+        : next && problem ? problem : undefined,
+      actions: [
+        ...(next ? [{ label: `Upgrade (${money(upgradeCost(lift)!)})`, action: 'upgrade', primary: true, disabled: problem !== null } as const] : []),
+        { label: `Remove (refund ${money(lift.invested * CONFIG.economy.removalRefund)})`, action: 'remove' },
+        CLOSE,
+      ],
     };
   }
 
@@ -108,7 +137,9 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const onRun = resort.skiers.filter((s) => s.state.kind === 'skiing' && s.state.runId === run.id).length;
     const ratings = rateRun(run, onRun);
     const end = run.points[run.points.length - 1]!;
-    const endsAt = [...liftsFrom(resort, end).map((l) => l.name), ...(isBase(resort, end) ? ['the base'] : [])];
+    const merge = mergeOf(resort, run);
+    const endsAt = [...liftsFrom(resort, end).map((l) => l.name), ...(isBase(resort, end) ? ['the base'] : []), ...(merge ? [merge.run.name] : [])];
+    const fun = ([0, 1, 2, 3] as const).map((skill) => funFor(run, skill, onRun, weatherSpec(world.weather.today).fun).toFixed(1)).join(' · ');
     return {
       title: run.name,
       accent: LEVEL_COLORS[run.profile.difficulty],
@@ -116,35 +147,83 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
         ['Difficulty', `${DIFFICULTY_NAMES[run.profile.difficulty]} (steepest ${grade(run.profile.steepestGrade)})`],
         ['Length', metres(run.profile.length)],
         ['Vertical', metres(run.profile.vertical)],
-        ['Fun', outOfTen(ratings.fun)],
-        ['Difficulty rating', outOfTen(ratings.difficulty)],
+        ['Fun by skill', fun],
         ['Crowding', outOfTen(ratings.crowding)],
         ['Skiers on it', String(onRun)],
+        ['Branches', branchesOf(resort, run).map((b) => b.run.name).join(', ') || 'None'],
         ['Leads to', endsAt.join(', ') || 'Nowhere'],
       ],
-      note: leadsSomewhere(resort, run) ? undefined : 'This run ends nowhere, so skiers won’t use it.',
+      note: leadsSomewhere(resort, run) ? 'Fun is out of 10 for beginners · intermediates · advanced · experts. Skiers like runs at their own level.' : 'This run ends nowhere, so skiers won’t use it.',
       actions: [{ label: 'Remove', action: 'remove' }, CLOSE],
+    };
+  }
+
+  if (selection?.kind === 'building') {
+    const building = resort.buildings.find((b) => b.id === selection.id);
+    if (!building) return null;
+    const spec = CONFIG.buildings[building.type];
+    const inside = resort.skiers.filter((s) => (s.state.kind === 'eating' || s.state.kind === 'toBuilding') && s.state.buildingId === building.id).length;
+    return {
+      title: building.name,
+      rows: [['Type', spec.label], ['Seats taken', `${inside} of ${spec.seats}`], ['Meal price', money(spec.mealPrice)], ['Meals today (resort)', String(resort.today.meals)]],
+      actions: [{ label: `Remove (refund ${money(spec.cost * CONFIG.economy.removalRefund)})`, action: 'remove' }, CLOSE],
     };
   }
 
   if (selection?.kind === 'skier') {
     const skier = resort.skiers.find((s) => s.id === selection.id);
     if (!skier) return null;
+    const guest = resort.guests.find((g) => g.id === skier.guestId);
+    const signed = (n: number): string => `${n >= 0 ? '+' : '−'}${Math.abs(Math.round(n))}`;
     return {
-      title: `Skier #${skier.id}`,
+      title: skier.name,
       accent: LEVEL_COLORS[skier.skill],
       rows: [
         ['Skill', SKILL_NAMES[skier.skill]],
+        ['Visit', guest ? `#${guest.visits + 1} (loyalty ${percent(guest.loyalty)})` : 'First'],
         ['Happiness', percent(skier.happiness)],
         ['Energy', percent(skier.energy)],
         ['Cash', money(skier.cash)],
         ['Doing', activityText(skier, resort)],
+        ...[...skier.log].reverse().map((f) => [`${FEELING_EMOJI[f.kind]} ${feelingText(f.kind, f.place)}`, signed(f.delta)] as const),
       ],
       note: `“${thoughtText(skier.thought)}”`,
       actions: [CLOSE],
     };
   }
   return null;
+}
+
+/** The resort overview: rating, money, price, land, requests and what skiers are saying today. */
+function describeResort(world: World): PanelModel {
+  const resort = activeResort(world);
+  const { company } = world;
+  const land = CONFIG.land[resort.land];
+  const tally = resort.today.feelings;
+  const said = [...topFeelings(tally, PRAISE, 3), ...topFeelings(tally, GRIPES, 3)];
+  const active = world.requests.filter((r) => r.status === 'active');
+  return {
+    title: resort.name,
+    rows: [
+      ['Rating', stars(company.stars)],
+      ['Reputation', percent(resort.reputation)],
+      ['Ticket price', `${money(resort.ticketPrice)} (fair ${money(CONFIG.economy.fairTicketPrice)})`],
+      ['Income today', money(income(company.today))],
+      ['Skiers today', `${resort.today.arrivals} (${resort.today.regulars} regulars)`],
+      ['Today', weatherText(world.weather.today)],
+      ['Tomorrow', weatherText(world.weather.tomorrow)],
+      ['Next land', land ? `${land.name}, ${land.stars}★` : 'All yours'],
+      ...active.map((r) => [`📋 ${requestTitle(r)}`, `${money(r.reward)} · by day ${r.deadline}`] as const),
+      ...said.map((k) => [`${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`, `${tally[k]!.delta >= 0 ? '+' : '−'}${Math.abs(Math.round(tally[k]!.delta))}`] as const),
+    ],
+    note: `${CONFIG.review.magazine} reviews you every ${CONFIG.review.everyDays} days. Stars unlock lifts, upgrades, huts and land.`,
+    actions: [
+      { label: '− $5', action: 'priceDown' },
+      { label: '+ $5', action: 'priceUp' },
+      ...(land ? [{ label: `Buy land (${money(land.cost)})`, action: 'buyLand', primary: true, disabled: company.stars < land.stars || company.money < land.cost } as const] : []),
+      CLOSE,
+    ],
+  };
 }
 
 /** Renders panel models, rebuilding the DOM only when its structure changes so buttons stay tappable. */

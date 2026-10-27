@@ -21,12 +21,15 @@
         <span class="stat money" data-icon="money"><b id="hud-money"></b></span>
         <span class="stat" data-icon="skier"><b id="hud-skiers"></b></span>
         <span class="stat" data-icon="happy"><b id="hud-happiness"></b></span>
+        <span class="stat income" title="Income today"><b id="hud-income"></b></span>
+        <span class="stat" title="Today’s weather and tomorrow’s forecast"><b id="hud-weather"></b></span>
+        <button class="stat rating" id="hud-rating" title="Resort: rating, prices, land and requests (P)"></button>
       </div>
       <div id="speed" class="segmented" aria-label="Game speed">
-        <button data-icon="pause" title="Pause (space)" aria-label="Pause"></button><button data-icon="play" title="Normal speed (1)" aria-label="Normal speed"></button><button data-icon="fast" title="Fast (2)" aria-label="Fast"></button><button data-icon="fastest" title="Fastest (3)" aria-label="Fastest"></button>
+        <button data-icon="pause" title="Pause (space)" aria-label="Pause"></button><button data-icon="play" title="Normal speed (1)" aria-label="Normal speed"></button><button data-icon="fast" title="Fast (2)" aria-label="Fast"></button><button data-icon="fastest" title="Faster (3)" aria-label="Faster"></button><button title="Fastest (4)" aria-label="Fastest">8×</button>
       </div>
       <div id="menu" class="segmented">
-        <button data-menu="save" data-icon="save" title="Save" aria-label="Save"></button><button data-menu="load" data-icon="load" title="Load" aria-label="Load"></button><button data-menu="new" data-icon="new" title="New mountain" aria-label="New mountain"></button>
+        <button data-menu="save" data-icon="save" title="Save" aria-label="Save"></button><button data-menu="load" data-icon="load" title="Load" aria-label="Load"></button><button data-menu="new" data-icon="new" title="New mountain" aria-label="New mountain"></button><button data-menu="pause" title="Menu (M)" aria-label="Menu">☰</button>
       </div>
     </header>
     <p id="hint" hidden></p>
@@ -37,6 +40,8 @@
       <button data-tool="chairlift" data-icon="chairlift" title="Chairlift (C)" style="--icon-fill: #f07167"><span>Chair</span></button>
       <button data-tool="gondola" data-icon="gondola" title="Gondola (G)" style="--icon-fill: #b388eb"><span>Gondola</span></button>
       <button data-tool="run" data-icon="run" title="Run (R)" style="--icon-fill: #8fd3ff"><span>Run</span></button>
+      <button data-tool="lodge" title="Base lodge (L)" class="emoji-tool">🏠<span>Lodge</span></button>
+      <button data-tool="hut" title="Mountain hut (H)" class="emoji-tool">🛖<span>Hut</span></button>
     </nav>
     <div id="toast" role="status"></div>
     <script type="module" src="/src/main.ts"></script>

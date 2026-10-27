@@ -1,7 +1,10 @@
+import { CONFIG } from '../config';
+import { liftCost } from '../sim/lifts';
+import { emptyWeek } from '../sim/progress';
 import type { World } from '../sim/world';
 
 /** Bump this whenever the saved shape of World changes, and add a migration from the previous version. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'summit-tycoon/save';
 
 export interface SaveFile {
@@ -21,7 +24,43 @@ interface VersionedData {
  * MIGRATIONS[n] upgrades a version n save to version n + 1. Old saves run every step up to SAVE_VERSION,
  * so each migration only ever has to understand its neighbour.
  */
-const MIGRATIONS: Readonly<Record<number, (save: VersionedData) => VersionedData>> = {};
+const MIGRATIONS: Readonly<Record<number, (save: VersionedData) => VersionedData>> = {
+  // Version 2 added guests, weather, lift tiers, buildings, land, reviews and requests. Skiers on the
+  // mountain in a version 1 save are sent home, since they predate guests; everything built is kept.
+  1: (save) => {
+    type Obj = Record<string, unknown>;
+    const w = save.world as Obj;
+    const company = w['company'] as Obj;
+    const today = company['today'] as Obj;
+    const resorts = w['resorts'] as Obj[];
+    return {
+      ...save,
+      version: 2,
+      world: {
+        ...w,
+        weather: { today: 'bluebird', tomorrow: 'cloudy' },
+        requests: [],
+        reviews: [],
+        company: { ...company, stars: 0, today: { ...today, food: 0, bonuses: 0 } },
+        resorts: resorts.map((r) => ({
+          ...r,
+          lifts: (r['lifts'] as Obj[]).map((l) => ({ ...l, queue: [], tier: 0, invested: liftCost(l['type'] as never, l['length'] as number) })),
+          buildings: [],
+          skiers: [],
+          guests: [],
+          coming: [],
+          regularCredit: 0,
+          regularsPerSecond: 0,
+          ticketPrice: CONFIG.economy.fairTicketPrice,
+          reputation: CONFIG.reputation.start,
+          land: 1,
+          today: { ...(r['today'] as Obj), regulars: 0, meals: 0, movedUp: 0, maxWait: 0, feelings: {} },
+          week: emptyWeek(),
+        })),
+      },
+    };
+  },
+};
 
 /** The subset of the Web Storage API we use, so tests can pass a plain object. */
 export interface KeyValueStore {

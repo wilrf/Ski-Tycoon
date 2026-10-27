@@ -1,0 +1,124 @@
+import './menu.css';
+import { CONFIG } from '../config';
+import { income } from '../sim/economy';
+import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
+import type { DayReport } from '../sim/world';
+import { FEELING_EMOJI, money, quoteText, requestTitle, stars, tallyText, weatherText } from './format';
+
+export type MenuChoice = 'continue' | 'new' | 'resume' | 'save' | 'load' | 'help';
+
+const el = (tag: string, className = '', text = ''): HTMLElement => {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text) e.textContent = text;
+  return e;
+};
+
+const HELP: readonly (readonly [string, string])[] = [
+  ['Open the mountain', 'Build a lift that starts in the flat base area at the bottom. Skiers only come once one does.'],
+  ['Draw runs', 'Pick Run and drag down the mountain from a lift’s top station or from another run. The slope colours show how steep each spot is (green, blue, black, red for double black). The end snaps to a lift, the base or another run, and the run opens when you let go.'],
+  ['Watch your skiers', 'Emoji pop up when something changes how a skier feels. Tap a skier to see why, or open Resort to see what everyone is saying today.'],
+  ['Grow', 'Happy skiers come back, and beginners who enjoy your greens move up a level. Every few days a magazine rates you. Stars pay a bonus and unlock lifts, upgrades, huts and land further up the mountain.'],
+  ['Earn', 'Set the ticket price in Resort: higher brings fewer, grumpier skiers. Lodges and huts sell lunch. Requests pay a bonus if you meet them in time.'],
+  ['Weather', 'Check tomorrow’s forecast in the day report. Powder days pull in experts, and storms stop exposed lifts high on the mountain.'],
+  ['Keys', 'Space pause, 1–4 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, P resort, U upgrade, M menu, Esc cancel.'],
+];
+
+/** The start screen and pause menu share one overlay; the day report is a card that doesn't stop the game. */
+export function createMenus(onChoice: (choice: MenuChoice) => void): {
+  showStart(hasSave: boolean): void;
+  showPause(): void;
+  hide(): void;
+  isOpen(): boolean;
+  showReport(report: DayReport): void;
+} {
+  const screen = document.body.appendChild(el('div', 'menu-screen'));
+  screen.hidden = true;
+  const report = document.body.appendChild(el('aside', 'day-report'));
+  report.hidden = true;
+
+  const render = (title: string, subtitle: string, choices: readonly (readonly [MenuChoice, string, boolean?])[]): void => {
+    screen.replaceChildren();
+    const card = screen.appendChild(el('div', 'menu-card'));
+    card.appendChild(el('h1', '', title));
+    card.appendChild(el('p', 'tagline', subtitle));
+    const buttons = card.appendChild(el('div', 'menu-buttons'));
+    for (const [choice, label, primary] of choices) {
+      const b = buttons.appendChild(el('button', primary ? 'primary' : '', label)) as HTMLButtonElement;
+      b.addEventListener('click', () => {
+        if (choice === 'help') return showHelp(card);
+        onChoice(choice);
+      });
+    }
+    screen.hidden = false;
+  };
+
+  const showHelp = (card: HTMLElement): void => {
+    card.querySelector('.help')?.remove();
+    const help = card.appendChild(el('dl', 'help'));
+    for (const [term, text] of HELP) {
+      help.appendChild(el('dt', '', term));
+      help.appendChild(el('dd', '', text));
+    }
+  };
+
+  return {
+    showStart(hasSave) {
+      render('Summit Tycoon', 'Carve a ski resort out of a wild mountain. Keep your skiers happy and they’ll keep coming back.', [
+        ...(hasSave ? [['continue', 'Continue', true] as const] : []),
+        ['new', 'New mountain', !hasSave],
+        ['help', 'How to play'],
+      ]);
+    },
+    showPause() {
+      render('Paused', 'The mountain waits for you.', [['resume', 'Resume', true], ['save', 'Save'], ['load', 'Load'], ['new', 'New mountain'], ['help', 'How to play']]);
+    },
+    hide() {
+      screen.hidden = true;
+    },
+    isOpen: () => !screen.hidden,
+    showReport(r) {
+      report.replaceChildren();
+      const close = report.appendChild(el('button', 'close', '✕')) as HTMLButtonElement;
+      close.title = 'Close';
+      close.addEventListener('click', () => void (report.hidden = true));
+      report.appendChild(el('h2', '', `Day ${r.day} report`));
+      const left = r.stats.leftHappy + r.stats.leftUnhappy;
+      const happyShare = left ? Math.round((r.stats.leftHappy / left) * 100) : 0;
+      const rows: [string, string][] = [
+        ['Skiers', `${r.stats.arrivals} (${r.stats.regulars} regulars)`],
+        ['Went home happy', `${happyShare}%`],
+        ['Income', `${money(income(r.ledger))} (tickets ${money(r.ledger.tickets)}, food ${money(r.ledger.food)}${r.ledger.bonuses ? `, bonuses ${money(r.ledger.bonuses)}` : ''})`],
+        ['Reputation', `${Math.round(r.reputation.before)}% → ${Math.round(r.reputation.after)}%`],
+        ...(r.stats.movedUp ? [['Moved up a level', `${r.stats.movedUp} skiers`] as [string, string]] : []),
+        ['Tomorrow', weatherText(r.forecast.today)],
+      ];
+      const dl = report.appendChild(el('dl'));
+      for (const [k, v] of rows) {
+        dl.appendChild(el('dt', '', k));
+        dl.appendChild(el('dd', '', v));
+      }
+      if (r.review) {
+        const review = report.appendChild(el('section', 'review'));
+        review.appendChild(el('h3', '', `${CONFIG.review.magazine} rates you ${stars(r.review.stars)}`));
+        if (r.newStars > 0) review.appendChild(el('p', 'good', `New rating! ${money(r.starBonus)} bonus. Check the toolbar and Resort for what unlocked.`));
+        for (const q of r.review.quotes) review.appendChild(el('p', 'quote', quoteText(q)));
+      }
+      const list = (title: string, lines: string[], cls = ''): void => {
+        if (lines.length === 0) return;
+        report.appendChild(el('h3', '', title));
+        const ul = report.appendChild(el('ul', cls));
+        for (const line of lines) ul.appendChild(el('li', '', line));
+      };
+      const tally = r.stats.feelings;
+      list('Skiers loved', topFeelings(tally, PRAISE, 3).map((k) => `${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`), 'good');
+      list('Skiers complained', topFeelings(tally, GRIPES, 3).map((k) => `${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`), 'bad');
+      list('Requests', [
+        ...r.done.map((q) => `✅ ${requestTitle(q)}: +${money(q.reward)}`),
+        ...r.failed.map((q) => `❌ ${requestTitle(q)}: missed`),
+        ...r.offered.map((q) => `📋 New: ${requestTitle(q)}, ${money(q.reward)} by day ${q.deadline}`),
+      ]);
+      report.hidden = false;
+    },
+  };
+}

@@ -6,6 +6,9 @@ export interface PointerHandlers {
   tap(at: Vec2): void;
   /** Mouse position with no button held, or null when it leaves. Touch never hovers. */
   hover(at: Vec2 | null): void;
+  /** Whether a one-finger or left-button drag should draw instead of pan right now. */
+  drawing(): boolean;
+  stroke(phase: 'start' | 'move' | 'end' | 'cancel', at: Vec2): void;
 }
 
 /** Movement under this many pixels still counts as a tap, so shaky fingers can build. */
@@ -13,31 +16,50 @@ const TAP_SLOP = 8;
 
 /**
  * One finger or mouse drag pans, two fingers pinch-zoom and pan, the wheel zooms at the cursor,
- * and a press that barely moves is a tap. Pointer Events cover mouse, touch and pen in one path.
+ * and a press that barely moves is a tap. While drawing (the run tool), one finger or the left button
+ * draws instead, and two fingers or the right or middle button still pan.
+ * Pointer Events cover mouse, touch and pen in one path.
  */
 export function attachPointer(el: HTMLElement, h: PointerHandlers): void {
   const pointers = new Map<number, Vec2>();
   let travelled = 0;
   let multiTouch = false;
+  let drawButton = false;
+  let stroking = false;
   const local = (e: PointerEvent | WheelEvent): Vec2 => {
     const r = el.getBoundingClientRect();
     return vec(e.clientX - r.left, e.clientY - r.top);
   };
 
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
   el.addEventListener('pointerdown', (e) => {
     el.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, local(e));
-    if (pointers.size === 1) travelled = 0;
+    if (pointers.size === 1) {
+      travelled = 0;
+      drawButton = e.button === 0 && h.drawing();
+    }
     multiTouch ||= pointers.size > 1;
+    if (multiTouch && stroking) {
+      stroking = false;
+      h.stroke('cancel', local(e));
+    }
   });
 
   el.addEventListener('pointermove', (e) => {
     const p = local(e);
     const last = pointers.get(e.pointerId);
     if (!last) return h.hover(e.pointerType === 'mouse' ? p : null);
-    if (pointers.size === 1) {
+    if (pointers.size === 1 && !multiTouch) {
       travelled += dist(last, p);
-      if (travelled > TAP_SLOP) h.pan(p.x - last.x, p.y - last.y);
+      if (travelled <= TAP_SLOP) {
+        // Not a drag yet.
+      } else if (drawButton && !stroking) {
+        stroking = true;
+        h.stroke('start', last);
+        h.stroke('move', p);
+      } else if (stroking) h.stroke('move', p);
+      else h.pan(p.x - last.x, p.y - last.y);
     } else if (pointers.size === 2) {
       const other = [...pointers].find(([id]) => id !== e.pointerId)![1];
       const before = lerp(last, other, 0.5), after = lerp(p, other, 0.5);
@@ -49,7 +71,10 @@ export function attachPointer(el: HTMLElement, h: PointerHandlers): void {
 
   const release = (e: PointerEvent): void => {
     if (!pointers.delete(e.pointerId)) return;
-    if (e.type === 'pointerup' && pointers.size === 0 && !multiTouch && travelled <= TAP_SLOP) h.tap(local(e));
+    if (stroking && pointers.size === 0) {
+      stroking = false;
+      h.stroke(e.type === 'pointerup' ? 'end' : 'cancel', local(e));
+    } else if (e.type === 'pointerup' && pointers.size === 0 && !multiTouch && travelled <= TAP_SLOP) h.tap(local(e));
     if (pointers.size === 0) multiTouch = false;
   };
   el.addEventListener('pointerup', release);

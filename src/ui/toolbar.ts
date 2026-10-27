@@ -1,12 +1,18 @@
-import type { LiftType } from '../config';
+import type { BuildingType, LiftType } from '../config';
 import type { Tool, UiState } from './tools';
 
-export type ToolChoice = 'select' | 'run' | LiftType;
+export type ToolChoice = 'select' | 'run' | LiftType | BuildingType;
 
-export const toolFor = (choice: ToolChoice): Tool =>
-  choice === 'select' ? { kind: 'select' } : choice === 'run' ? { kind: 'run', points: [] } : { kind: 'lift', liftType: choice, bottom: null, top: null };
+export function toolFor(choice: ToolChoice): Tool {
+  switch (choice) {
+    case 'select': return { kind: 'select' };
+    case 'run': return { kind: 'run', points: [] };
+    case 'lodge': case 'hut': return { kind: 'building', buildingType: choice, pos: null };
+    default: return { kind: 'lift', liftType: choice, bottom: null, top: null };
+  }
+}
 
-const choiceOf = (tool: Tool): ToolChoice => (tool.kind === 'lift' ? tool.liftType : tool.kind);
+const choiceOf = (tool: Tool): ToolChoice => (tool.kind === 'lift' ? tool.liftType : tool.kind === 'building' ? tool.buildingType : tool.kind);
 
 /** Wires the build toolbar and returns a function that highlights the active tool. */
 export function createToolbar(el: HTMLElement, onPick: (choice: ToolChoice) => void): (ui: UiState) => void {

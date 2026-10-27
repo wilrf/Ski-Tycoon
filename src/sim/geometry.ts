@@ -42,3 +42,17 @@ export function distToPolyline(p: Vec2, points: readonly Vec2[]): number {
   if (points.length === 1) return dist(p, points[0]!);
   return Math.min(...points.slice(1).map((b, i) => distToSegment(p, points[i]!, b)));
 }
+
+/** The point on a polyline nearest to p, with its distance along the line and from p. */
+export function projectOnPolyline(p: Vec2, points: readonly Vec2[]): { readonly at: number; readonly point: Vec2; readonly gap: number } {
+  let best = { at: 0, point: points[0]!, gap: dist(p, points[0]!) };
+  let along = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!, b = points[i]!, len = dist(a, b);
+    const t = len === 0 ? 0 : clamp(((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len), 0, 1);
+    const point = lerp(a, b, t), gap = dist(p, point);
+    if (gap < best.gap) best = { at: along + t * len, point, gap };
+    along += len;
+  }
+  return best;
+}

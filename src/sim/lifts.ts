@@ -1,4 +1,4 @@
-import { CONFIG, type LiftType } from '../config';
+import { CONFIG, type LiftTier, type LiftType } from '../config';
 import { dist, segmentDistance, vec, type Vec2 } from './geometry';
 import { heightAt, inBounds, type Terrain } from './terrain';
 
@@ -14,6 +14,10 @@ export interface Lift {
   readonly queue: number[];
   /** Fractional seats that have come round since the last boarding. */
   boardCredit: number;
+  /** Index into CONFIG.liftTiers[type]; upgrades raise it in place. */
+  tier: number;
+  /** Everything spent on the lift, construction plus upgrades, so removal refunds a share of it all. */
+  invested: number;
 }
 
 export interface LiftPlan {
@@ -29,9 +33,18 @@ export interface LiftPlan {
 export const liftCost = (type: LiftType, length: number): number =>
   Math.round(CONFIG.lifts[type].baseCost + CONFIG.lifts[type].costPerMetre * length);
 
-export const rideSeconds = (lift: Lift): number => lift.length / CONFIG.lifts[lift.type].speed;
+export const liftTier = (lift: Pick<Lift, 'type' | 'tier'>): LiftTier => CONFIG.liftTiers[lift.type][lift.tier]!;
+export const nextTier = (lift: Pick<Lift, 'type' | 'tier'>): LiftTier | undefined => CONFIG.liftTiers[lift.type][lift.tier + 1];
+export const liftSpeed = (lift: Pick<Lift, 'type' | 'tier'>): number => CONFIG.lifts[lift.type].speed * liftTier(lift).speedFactor;
+export const liftCapacity = (lift: Pick<Lift, 'type' | 'tier'>): number => CONFIG.lifts[lift.type].capacityPerHour * liftTier(lift).capacityFactor;
+export const upgradeCost = (lift: Lift): number | undefined => {
+  const next = nextTier(lift);
+  return next && Math.round(liftCost(lift.type, lift.length) * next.upgradeCostFactor);
+};
 
-export const waitSeconds = (lift: Lift): number => (lift.queue.length * 3600) / CONFIG.lifts[lift.type].capacityPerHour;
+export const rideSeconds = (lift: Lift): number => lift.length / liftSpeed(lift);
+
+export const waitSeconds = (lift: Lift): number => (lift.queue.length * 3600) / liftCapacity(lift);
 
 /** Measures a proposed lift and lists every reason it can't be built. */
 export function planLift(t: Terrain, lifts: readonly Lift[], money: number, type: LiftType, bottom: Vec2, top: Vec2): LiftPlan {
@@ -58,7 +71,7 @@ export function planLift(t: Terrain, lifts: readonly Lift[], money: number, type
  * Seats arrive at capacityPerHour; a seat that passes an empty queue is lost, so credit never banks.
  */
 export function boardLift(lift: Lift, dt: number): number[] {
-  lift.boardCredit += (CONFIG.lifts[lift.type].capacityPerHour / 3600) * dt;
+  lift.boardCredit += (liftCapacity(lift) / 3600) * dt;
   const boarded = lift.queue.splice(0, Math.min(Math.floor(lift.boardCredit), lift.queue.length));
   lift.boardCredit = Math.min(lift.boardCredit - boarded.length, 1);
   return boarded;
