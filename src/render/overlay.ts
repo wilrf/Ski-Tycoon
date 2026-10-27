@@ -1,7 +1,8 @@
-import { CONFIG, type BuildingType, type FeatureType } from '../config';
-import { lerp, pointAlong, projectOnPolyline, vec, type Vec2 } from '../sim/geometry';
+import { CONFIG, type BuildingType } from '../config';
+import { lerp, projectOnPolyline, vec, type Vec2 } from '../sim/geometry';
 import { landEdge } from '../sim/progress';
 import { featureProblem, gradeToDifficulty } from '../sim/runs';
+import { drawFeature } from './featureArt';
 import { cellGrade, terrainExtent, type Terrain } from '../sim/terrain';
 import { activeResort, buildingProblemsHere, heldLifts, runStartAt } from '../sim/world';
 import { money } from '../ui/format';
@@ -54,14 +55,14 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
     pill(ctx, vec(view.width / 2, bottom > 190 ? bottom - 20 : bottom + 20), `🔒 ${next.name} · ${next.stars}★ · ${money(next.cost)}`);
   }
 
-  for (const run of resort.runs) for (const ft of run.features) feature(ctx, at(pointAlong(run.points, ft.at)), ft.type, camera.zoom);
   if (ui.tool.kind === 'feature' && ui.hover) {
     const { featureType, runId } = ui.tool;
     const run = resort.runs.find((r) => r.id === runId);
     if (run) {
       const spot = projectOnPolyline(ui.hover, run.points);
       ctx.globalAlpha = featureProblem(run, featureType, spot.at) ? 0.35 : 0.85;
-      feature(ctx, at(spot.point), featureType, camera.zoom);
+      drawFeature(ctx, run, featureType, spot.at, at, camera.zoom, 'ground');
+      drawFeature(ctx, run, featureType, spot.at, at, camera.zoom, 'roof');
       ctx.globalAlpha = 1;
     }
   }
@@ -119,28 +120,6 @@ function building(ctx: CanvasRenderingContext2D, p: Vec2, type: BuildingType, na
   ctx.textAlign = 'start';
   ctx.textBaseline = 'alphabetic';
   if (zoom > 0.45) pill(ctx, vec(p.x, p.y + r + 12), name);
-}
-
-const FEATURE_ICON: Record<FeatureType, string> = { rollers: '〰️', berms: '↪️', tunnel: '🕳️', smallJump: 'S', mediumJump: 'M', largeJump: 'L' };
-
-/** A small round badge on the run: an icon for rollers, berms and tunnels, and the size letter for jumps. */
-function feature(ctx: CanvasRenderingContext2D, p: Vec2, type: FeatureType, zoom: number): void {
-  const r = Math.max(8, 9 * zoom);
-  const jump = type.endsWith('Jump');
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-  ctx.fillStyle = jump ? '#f77f00' : '#fdf8ee';
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = 'rgba(23, 35, 61, 0.8)';
-  ctx.stroke();
-  ctx.font = jump ? `800 ${Math.round(r * 1.2)}px "Nunito", system-ui, sans-serif` : `${Math.round(r * 1.1)}px system-ui, sans-serif`;
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(FEATURE_ICON[type], p.x, p.y + 1);
-  ctx.textAlign = 'start';
-  ctx.textBaseline = 'alphabetic';
 }
 
 function ring(ctx: CanvasRenderingContext2D, c: Vec2, r: number, color: string, fill = false): void {
