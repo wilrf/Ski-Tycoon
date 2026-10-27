@@ -99,6 +99,12 @@ export const CONFIG = {
     /** At each speed, draw one skier in this many, so fast-forward isn't a swarm. */
     drawEvery: [1, 1, 2, 3],
     maxTicksPerFrame: 80,
+    /**
+     * Zoomed in, time eases down so one skier can be followed the whole way down a run. Between these
+     * zooms the pace falls smoothly to this many game seconds per real second (about 30 m a second for an
+     * expert, a few seconds to cross the screen).
+     */
+    slowMotion: { fromZoom: 0.9, toZoom: 2.4, gameSecondsPerSecond: 3 },
   },
   terrain: {
     size: 160,
