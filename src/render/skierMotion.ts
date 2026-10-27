@@ -16,13 +16,13 @@ export interface SkierPose {
 }
 
 /** Turn shape by skill: beginners make long, wide turns; experts make short, quick ones. Metres. */
-const TURN_LENGTH = [34, 26, 19, 14] as const;
-const TURN_WIDTH = [6.5, 6, 5, 4] as const;
+const TURN_LENGTH = [34, 26, 19, 14, 12] as const;
+const TURN_WIDTH = [6.5, 6, 5, 4, 3.5] as const;
 /**
  * How much skiers linger at the edge of each turn and then dart through the fall line, like a raindrop
  * that pauses and runs. Beginners hesitate before committing to the next turn; experts flow.
  */
-const RHYTHM = [0.45, 0.35, 0.25, 0.15] as const;
+const RHYTHM = [0.45, 0.35, 0.25, 0.15, 0.1] as const;
 /** Distance skiers straighten out over before a jump so they hit it square. Metres. */
 const RUN_IN = 12;
 const JUMPS: Partial<Record<FeatureType, { readonly length: number; readonly peak: number }>> = {
@@ -49,8 +49,8 @@ const SPRAY_FADE = 4;
 /** Where in each turn the ski is loaded hardest: just past the fall line, in the lower half of the turn. */
 const SPRAY_AT = Math.PI / 2 + Math.PI / 6;
 /** Beginners skid and throw big, scrappy puffs; experts carve and throw a thin fan. */
-const SPRAY_SIZE = [1.5, 1.15, 0.8, 0.55] as const;
-const SPRAY_COUNT = [9, 8, 6, 5] as const;
+const SPRAY_SIZE = [1.5, 1.15, 0.8, 0.55, 0.5] as const;
+const SPRAY_COUNT = [9, 8, 6, 5, 5] as const;
 const LANDING_COUNT = 12;
 /** Figures are drawn well over life size so they read on the map; spray is scaled to match them. */
 const FIGURE_SCALE = 2.8;

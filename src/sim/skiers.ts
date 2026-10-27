@@ -1,12 +1,12 @@
-import { CONFIG, type ApresTier, type Level } from '../config';
+import { CONFIG, type ApresTier, type Skill } from '../config';
 import { buildingsNear, seatsOf, type Building } from './buildings';
 import { clamp, dist, lerp, pointAlong, type Vec2 } from './geometry';
 import { liftTier, rideSeconds, waitSeconds, type Lift } from './lifts';
 import { branchesOf, leadsSomewhere, liftsFrom, mergeOf, runsFromLift, type Mountain } from './network';
 import { nextFloat, nextRange, pickWeighted, type Rng } from './rng';
-import { favouriteFeature, featureFun, funFor, rateRun, type Run } from './runs';
+import { favouriteFeature, featureFun, funFor, rateRun, runLevel, type Run } from './runs';
 
-export type SkillLevel = Level;
+export type SkillLevel = Skill;
 
 export type Thought =
   | { readonly kind: 'arrived' }
@@ -190,16 +190,16 @@ export function feelPrice(journal: Journal, s: Skier, price: number, time: numbe
  */
 export function chooseRun(runs: readonly Run[], skill: SkillLevel, rng: Rng): { run: Run; scared: boolean } | null {
   const pull = (r: Run): number => 1 + featureFun(r, skill) / CONFIG.featureRules.maxFun;
-  const comfortable = pickWeighted(rng, runs, (r) => (r.profile.difficulty === skill ? 3 : r.profile.difficulty < skill ? 1 : 0) * pull(r));
+  const comfortable = pickWeighted(rng, runs, (r) => (r.profile.difficulty === runLevel(skill) ? 3 : r.profile.difficulty < runLevel(skill) ? 1 : 0) * pull(r));
   if (comfortable) return { run: comfortable, scared: false };
-  const stretch = pickWeighted(rng, runs, (r) => (r.profile.difficulty === skill + 1 ? 1 : 0));
+  const stretch = pickWeighted(rng, runs, (r) => (r.profile.difficulty === runLevel(skill) + 1 ? 1 : 0));
   return stretch && nextFloat(rng) < CONFIG.skiers.braveChance ? { run: stretch, scared: true } : null;
 }
 
 /** Picks a reachable running lift, preferring ones with runs the skier can handle and short lines. */
 function chooseLift(ctx: SkierContext, skier: Skier): Lift | undefined {
   const m = ctx.mountain;
-  const suits = (lift: Lift): boolean => runsFromLift(m, lift).some((r) => r.profile.difficulty <= skier.skill && leadsSomewhere(m, r));
+  const suits = (lift: Lift): boolean => runsFromLift(m, lift).some((r) => r.profile.difficulty <= runLevel(skier.skill) && leadsSomewhere(m, r));
   const options = liftsFrom(m, skier.pos).filter((l) => !skier.avoid.includes(l.id) && !ctx.held.has(l.id));
   // Skiers read the trail map, so a lift with nothing at their level is a last resort; nobody likes a long line.
   return pickWeighted(ctx.rng, options, (l) => (suits(l) ? 1 : 0.05) / (1 + waitSeconds(l) / CONFIG.skiers.queueTolerance));
@@ -332,7 +332,7 @@ function finishRun(ctx: SkierContext, s: Skier, run: Run, scared: boolean): void
   } else {
     const crowded = rateRun(run, onRun).crowding >= CONFIG.skiers.crowdedRunRating;
     // Two levels down is dull for anyone; one level down only when the run is short and flat too.
-    const bored = run.profile.difficulty <= s.skill - 2 || (run.profile.difficulty < s.skill && fun < 1.5);
+    const bored = run.profile.difficulty <= runLevel(s.skill) - 2 || (run.profile.difficulty < runLevel(s.skill) && fun < 1.5);
     const kind = crowded ? 'crowdedRun' : bored ? 'boredRun' : fun >= 6 ? 'greatRun' : 'goodRun';
     // A bored expert is a little worse off than if they'd skied nothing, and a packed run spoils the fun.
     const joy = bored ? -2 : (CONFIG.skiers.bestRunJoy * fun) / 10 - (crowded ? 3 : 0);

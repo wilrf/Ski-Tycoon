@@ -4,7 +4,7 @@ import { income } from '../sim/economy';
 import { liftCapacity, liftTier, type Lift, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
-import { featureUpkeep, funFor, profileRun, rateRun } from '../sim/runs';
+import { featureUpkeep, funFor, profileRun, rateRun, runLevel } from '../sim/runs';
 import { weatherSpec } from '../sim/weather';
 import { activeResort, affordableLength, forecastDay, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
@@ -39,8 +39,8 @@ export interface PanelModel {
 }
 
 const FEATURE_TYPES = Object.keys(CONFIG.features) as FeatureType[];
-const SKILL_LEVELS = [0, 1, 2, 3] as const;
-const SKIER_GROUPS = ['beginners', 'intermediates', 'advanced skiers', 'experts'] as const;
+const SKILL_LEVELS = [0, 1, 2, 3, 4] as const;
+const SKIER_GROUPS = ['beginners', 'intermediates', 'experts', 'pros', 'olympians'] as const;
 
 const CLOSE: PanelButton = { label: 'Close', action: 'close' };
 const CANCEL: PanelButton = { label: 'Cancel', action: 'cancel' };
@@ -262,7 +262,7 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const signed = (n: number): string => `${n >= 0 ? '+' : '−'}${Math.abs(Math.round(n))}`;
     return {
       title: skier.name,
-      accent: LEVEL_COLORS[skier.skill],
+      accent: LEVEL_COLORS[runLevel(skier.skill)],
       rows: [
         ['Skill', SKILL_NAMES[skier.skill]],
         ['Visit', guest ? `#${guest.visits + 1} (loyalty ${percent(guest.loyalty)})` : 'First'],

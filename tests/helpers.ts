@@ -1,5 +1,5 @@
 import { vec, type Vec2 } from '../src/sim/geometry';
-import { CONFIG, type Level, type LiftType } from '../src/config';
+import { CONFIG, type LiftType, type Skill } from '../src/config';
 import { planLift, type Lift } from '../src/sim/lifts';
 import { createRng } from '../src/sim/rng';
 import { createSkier, type Skier, type SkierContext } from '../src/sim/skiers';
@@ -32,7 +32,7 @@ export function makeLift(t: Terrain, id: number, bottom: Vec2, top: Vec2, type: 
   return { id, name: `Lift ${id}`, type, bottom, top, length, rise, queue: [], boardCredit: 0, tier: 0, invested: cost };
 }
 
-export const makeSkier = (pos: Vec2, skill: Level = 1, id = 1): Skier =>
+export const makeSkier = (pos: Vec2, skill: Skill = 1, id = 1): Skier =>
   createSkier({ id, guestId: id, name: `Skier ${id}`, skill, cash: 200, happiness: 70, pos });
 
 export const makeContext = (mountain: Mountain, overrides: Partial<SkierContext> = {}): SkierContext => ({

@@ -1,8 +1,11 @@
-import { CONFIG, type FeatureType, type Level } from '../config';
+import { CONFIG, type FeatureType, type Level, type Skill } from '../config';
 import { clamp, pointAlong, polylineLength, type Vec2 } from './geometry';
 import { heightAt, inBounds, type Terrain } from './terrain';
 
 export type Difficulty = Level;
+
+/** The run colour a skier is at home on: pros and olympians both belong on double blacks. */
+export const runLevel = (skill: Skill): Level => (skill === 4 ? 3 : skill);
 
 export interface RunProfile {
   readonly length: number;
@@ -74,14 +77,14 @@ function curviness(t: Terrain, points: readonly Vec2[], length: number): number 
  * Extra fun from a run's curves and features for a skier of this level, before the cap that keeps a dull
  * run from being rescued by a jump. Skiers skip features that aren't for them, so these never hurt.
  */
-export function featureFun(run: Run, skill: Level): number {
+export function featureFun(run: Run, skill: Skill): number {
   const curves = clamp(run.profile.curviness / CONFIG.runs.fullCurviness, 0, 1) * CONFIG.runs.curveFun;
   const built = run.features.reduce((sum, f) => sum + CONFIG.features[f.type].appeal[skill], 0) * CONFIG.featureRules.funPerAppeal;
   return Math.min(CONFIG.featureRules.maxFun, curves + built);
 }
 
 /** The feature this skier likes most on the run, or 'curves' when the shape is what they enjoyed. */
-export function favouriteFeature(run: Run, skill: Level): FeatureType | 'curves' | null {
+export function favouriteFeature(run: Run, skill: Skill): FeatureType | 'curves' | null {
   const best = run.features.reduce<RunFeature | null>((b, f) => (CONFIG.features[f.type].appeal[skill] > (b ? CONFIG.features[b.type].appeal[skill] : 0) ? f : b), null);
   if (best && CONFIG.features[best.type].appeal[skill] >= 0.5) return best.type;
   return run.profile.curviness >= CONFIG.runs.fullCurviness / 2 ? 'curves' : null;
@@ -119,8 +122,8 @@ export function runProblems(t: Terrain, points: readonly Vec2[]): string[] {
  * How much a skier of this level enjoys the run, 0 to 10. A run at their level is the most fun; each level
  * below it is duller (experts get bored on greens), and a run above it is mostly fear.
  */
-export function funFor(run: Run, skill: Level, skiersOnRun: number, weatherFun: readonly number[] = [1, 1, 1, 1]): number {
-  const gap = run.profile.difficulty - skill;
+export function funFor(run: Run, skill: Skill, skiersOnRun: number, weatherFun: readonly number[] = [1, 1, 1, 1]): number {
+  const gap = run.profile.difficulty - runLevel(skill);
   const match = gap > 0 ? 0.4 : CONFIG.runs.belowSkillFun ** -gap;
   const base = rateRun(run, skiersOnRun).fun * match * weatherFun[run.profile.difficulty]!;
   // A skier out of their depth is too busy surviving to enjoy the berms.

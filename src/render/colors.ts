@@ -18,6 +18,7 @@ const SKILL_JACKETS: Record<SkillLevel, readonly string[]> = {
   1: ['#1d6fe0', '#3a86ff', '#1659b8'],
   2: ['#15181d', '#2b2f36', '#3a3f48'],
   3: ['#d62828', '#e63946', '#b51f1f'],
+  4: ['#e0a800', '#ffb703', '#c99200'],
 };
 export const skillJacket = (s: { readonly id: number; readonly skill: SkillLevel }): string => {
   const shades = SKILL_JACKETS[s.skill];

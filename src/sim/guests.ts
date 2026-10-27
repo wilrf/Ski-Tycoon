@@ -1,4 +1,4 @@
-import { CONFIG, type Level } from '../config';
+import { CONFIG, type Skill } from '../config';
 import { clamp } from './geometry';
 import { nextFloat, pickWeighted, type Rng } from './rng';
 import type { Skier } from './skiers';
@@ -10,7 +10,7 @@ import type { Skier } from './skiers';
 export interface Guest {
   readonly id: number;
   readonly name: string;
-  skill: Level;
+  skill: Skill;
   /** 0 to 1 toward the next skill level. */
   progress: number;
   /** 0 to 100: how likely they are to come back. */
@@ -23,7 +23,7 @@ export interface Guest {
 const FIRST = ['Alex', 'Sam', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan', 'Jamie', 'Avery', 'Quinn', 'Dana', 'Robin', 'Kai', 'Noa', 'Lee', 'Sky', 'Remy', 'Ari', 'Jules', 'Sasha', 'Toni', 'Mika', 'Rowan', 'Emery', 'Blake', 'Drew', 'Hollis', 'Ellis', 'Marley', 'Reese'];
 const LAST = 'ABCDEFGHJKLMNPRSTVW';
 
-const SKILLS: readonly Level[] = [0, 1, 2, 3];
+const SKILLS: readonly Skill[] = [0, 1, 2, 3, 4];
 
 export function newGuest(id: number, rng: Rng, skillPull: readonly number[]): Guest {
   const first = FIRST[Math.floor(nextFloat(rng) * FIRST.length)]!;
@@ -53,9 +53,9 @@ export function recordVisit(g: Guest, s: Skier, happy: boolean): boolean {
   g.loyalty = clamp(g.loyalty + (s.happiness - 55) * 0.5 + (happy ? 5 : -15) + s.apresLoyalty, 0, 100);
   // Nobody moves up in a single day, however much they ski.
   g.progress += Math.min(CONFIG.guests.maxProgressPerVisit, s.practice * progressPerRun + s.stretches * progressPerStretch);
-  g.movedUp = g.progress >= 1 && g.skill < 3;
+  g.movedUp = g.progress >= 1 && g.skill < CONFIG.guests.maxTaughtSkill;
   if (g.movedUp) {
-    g.skill = (g.skill + 1) as Level;
+    g.skill = (g.skill + 1) as Skill;
     g.progress = 0;
   }
   return g.movedUp;
