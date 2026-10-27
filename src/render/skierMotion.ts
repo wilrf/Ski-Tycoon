@@ -18,6 +18,11 @@ export interface SkierPose {
 /** Turn shape by skill: beginners make long, wide turns; experts make short, quick ones. Metres. */
 const TURN_LENGTH = [34, 26, 19, 14] as const;
 const TURN_WIDTH = [6.5, 6, 5, 4] as const;
+/**
+ * How much skiers linger at the edge of each turn and then dart through the fall line, like a raindrop
+ * that pauses and runs. Beginners hesitate before committing to the next turn; experts flow.
+ */
+const RHYTHM = [0.45, 0.35, 0.25, 0.15] as const;
 /** Distance skiers straighten out over before a jump so they hit it square. Metres. */
 const RUN_IN = 12;
 const JUMPS: Partial<Record<FeatureType, { readonly length: number; readonly peak: number }>> = {
@@ -57,7 +62,11 @@ export function skiingPose(s: Skier, runs: readonly Run[], alpha: number): Skier
   // Each skier starts their turns at their own point in the rhythm so a crowd doesn't move in lockstep.
   const k = (Math.PI * 2) / TURN_LENGTH[s.skill], phase = (s.id * 2.399) % (Math.PI * 2);
   const width = TURN_WIDTH[s.skill] * straighten * (state.scared ? 1.3 : 1);
-  const side = Math.sin(d * k + phase) * width, drift = Math.cos(d * k + phase) * width * k;
+  // Warping the phase keeps every turn's edge and fall-line crossing where they were, but changes the
+  // pace between them: quick across the fall line (theta = 0), slow at the turn's edge (theta = pi / 2).
+  const theta = d * k + phase, a = RHYTHM[s.skill];
+  const psi = theta + (a / 2) * Math.sin(2 * theta);
+  const side = Math.sin(psi) * width, drift = Math.cos(psi) * width * k * (1 + a * Math.cos(2 * theta));
   return {
     pos: vec(here.x + n.x * side, here.y + n.y * side),
     heading: Math.atan2(t.y + n.y * drift, t.x + n.x * drift),
