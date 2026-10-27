@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { clamp, vec, type Vec2 } from './geometry';
+import type { HeightGrid } from './erosion';
 import { createRng, nextFloat, type Rng } from './rng';
 
 export const TerrainType = { Snow: 0, Forest: 1, Rock: 2, Base: 3 } as const;
@@ -59,6 +60,10 @@ export function terrainFromHeights(size: number, cellSize: number, height: (p: V
   }
   return t;
 }
+
+/** Builds a terrain from a ready-made height grid (generated or real), one height per cell. */
+export const terrainFromGrid = (grid: HeightGrid, forest?: (p: Vec2) => number): Terrain =>
+  terrainFromHeights(grid.size, grid.cellSize, (p) => grid.h[Math.floor(p.y / grid.cellSize) * grid.size + Math.floor(p.x / grid.cellSize)]!, forest);
 
 /** Smooth value noise in [0, 1] with lattice spacing `scale` metres. */
 function valueNoise(rng: Rng, extent: number, scale: number): (x: number, y: number) => number {
