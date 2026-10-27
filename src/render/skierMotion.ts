@@ -49,8 +49,8 @@ const SPRAY_FADE = 4;
 /** Where in each turn the ski is loaded hardest: just past the fall line, in the lower half of the turn. */
 const SPRAY_AT = Math.PI / 2 + Math.PI / 6;
 /** Beginners skid and throw big, scrappy puffs; experts carve and throw a thin fan. */
-const SPRAY_SIZE = [1.5, 1.15, 0.8, 0.55] as const;
-const SPRAY_COUNT = [9, 8, 6, 5] as const;
+const SPRAY_SIZE = [1.5, 1.15, 0.8, 0.55, 0.5] as const;
+const SPRAY_COUNT = [9, 8, 6, 5, 5] as const;
 const LANDING_COUNT = 12;
 /** Figures are drawn well over life size so they read on the map; spray is scaled to match them. */
 const FIGURE_SCALE = 2.8;
