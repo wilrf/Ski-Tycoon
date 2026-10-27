@@ -3,14 +3,14 @@
 import type { RangeKey, RangeParams } from '../sim/ranges';
 
 export const RANGE_PARAMS: Readonly<Record<RangeKey, RangeParams>> = {
-  alps: {relief: 592, profile: 1.68, ridged: 0.65, gain: 0.69, spurs: 0.255, incision: 0, creep: 0.0375, talus: 32, bench: 0},
-  rockies: {relief: 382, profile: 1.21, ridged: 0.85, gain: 0.461, spurs: 0.172, incision: 0.677, creep: 0.0438, talus: 60, bench: 0.025},
-  andes: {relief: 732, profile: 0.917, ridged: 0, gain: 0.7, spurs: 0.152, incision: 0, creep: 0.232, talus: 53, bench: 0.663},
-  himalayas: {relief: 732, profile: 1.36, ridged: 0.9, gain: 0.62, spurs: 0.174, incision: 0, creep: 0.0625, talus: 50.6, bench: 0.189},
-  cascades: {relief: 598, profile: 0.764, ridged: 0.839, gain: 0.443, spurs: 0.0755, incision: 1, creep: 0.5, talus: 36.1, bench: 0.05},
-  coast: {relief: 732, profile: 0.7, ridged: 0.543, gain: 0.695, spurs: 0.171, incision: 0.963, creep: 0.5, talus: 25, bench: 0.0125},
-  sierra: {relief: 528, profile: 1.2, ridged: 0.341, gain: 0.7, spurs: 0.263, incision: 0, creep: 0.383, talus: 60, bench: 1},
-  appalachians: {relief: 298, profile: 1.46, ridged: 0.925, gain: 0.377, spurs: 0.135, incision: 1.05, creep: 0.208, talus: 45.2, bench: 0.236},
-  japan_alps: {relief: 616, profile: 1.13, ridged: 0.738, gain: 0.69, spurs: 0.287, incision: 0.15, creep: 0.326, talus: 25, bench: 0.681},
-  hokkaido: {relief: 319, profile: 0.7, ridged: 0.465, gain: 0.7, spurs: 0.358, incision: 1.23, creep: 0.301, talus: 60, bench: 0.17},
+  alps: {relief: 575, profile: 1.6, ridged: 0.575, gain: 0.609, spurs: 0.159, incision: 0.55, creep: 0.00625, talus: 55.5, plateau: 0.912},
+  rockies: {relief: 406, profile: 1.31, ridged: 0.389, gain: 0.641, spurs: 0.05, incision: 1.15, creep: 0.102, talus: 36.4, plateau: 0.583},
+  andes: {relief: 685, profile: 0.984, ridged: 0, gain: 0.58, spurs: 0.304, incision: 0.2, creep: 0.487, talus: 58.7, plateau: 0.713},
+  himalayas: {relief: 676, profile: 1.73, ridged: 0.46, gain: 0.3, spurs: 0.583, incision: 0, creep: 0.494, talus: 27.6, plateau: 0},
+  cascades: {relief: 553, profile: 1.38, ridged: 0.487, gain: 0.3, spurs: 0.37, incision: 0.349, creep: 0.0275, talus: 60, plateau: 0.0125},
+  coast: {relief: 647, profile: 1.46, ridged: 0.888, gain: 0.3, spurs: 0.223, incision: 0, creep: 0.5, talus: 39.9, plateau: 0.987},
+  sierra: {relief: 419, profile: 1.6, ridged: 0.322, gain: 0.315, spurs: 0.887, incision: 0, creep: 0.271, talus: 30.6, plateau: 0.937},
+  appalachians: {relief: 257, profile: 1.92, ridged: 0.325, gain: 0.305, spurs: 0.416, incision: 1.2, creep: 0, talus: 45.5, plateau: 0.975},
+  japan_alps: {relief: 689, profile: 0.7, ridged: 0.648, gain: 0.56, spurs: 0.287, incision: 0.391, creep: 0.0675, talus: 34.6, plateau: 0.539},
+  hokkaido: {relief: 268, profile: 1.61, ridged: 0.975, gain: 0.3, spurs: 0.359, incision: 0.606, creep: 0, talus: 59.6, plateau: 0.975},
 };

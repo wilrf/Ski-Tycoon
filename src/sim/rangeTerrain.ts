@@ -8,18 +8,15 @@ import { terrainFromGrid, type Terrain } from './terrain';
 
 const smooth = (t: number): number => t * t * (3 - 2 * t);
 
-/** Soft steps: flat shelves joined by short risers, `steps` of them between 0 and `top`. */
-function terrace(h: number, top: number, steps: number): number {
-  const s = (h / top) * steps, k = Math.floor(s);
-  return ((k + smooth(s - k)) / steps) * top;
-}
+/** max(0, x) with the corner rounded over a width of about `k`, so a flattened top has no crease. */
+const softPositive = (x: number, k: number): number => (x + Math.sqrt(x * x + k * k) - k) / 2;
 
 /**
  * A ski face in a range's character, as heights in metres on the game grid. Four passes:
  *  1. shape: a summit near the top falling to a base along the bottom edge (same layout as the default mountain);
  *  2. landforms: ridged noise starting at ~700 m, the spacing of real spurs and valleys, with finer octaves fading
  *     by `gain`; it fades toward the base;
- *  3. benches: the upper face is partly terraced into shelves and broad tops;
+ *  3. plateau: ground above 60% of the face's height rises more slowly, giving broad tops;
  *  4. erosion: hollows are filled so all water drains, water cuts a drainage network, soil creep rounds it, and
  *     oversteep ground slides to the talus angle, which leaves the planar slopes real mountains have.
  * The bottom strip is then eased flat so the game always finds base ground.
@@ -40,12 +37,12 @@ export function generateRangeGrid(seed: number, p: RangeParams): HeightGrid {
     const t = clamp((1 - Math.hypot(dx, dy, 0.1)) / 0.9, 0, 1);
     // Spurs run down the fall line, so the noise is stretched a little along y.
     let z = t ** p.profile + p.spurs * (0.15 + t) * landforms(x / 700, y / 900);
-    z = z + (terrace(z, 1, 5) - z) * p.bench * smooth(clamp(t * 1.6 - 0.3, 0, 1));
+    z -= 0.8 * p.plateau * softPositive(z - 0.6, 0.08);
     h[i] = p.relief * z - Math.max(0, y - baseY) * 0.03;
   }
   const grid = { size, cellSize, h };
   fillPits(grid);
-  incise(grid, p.incision, 24);
+  incise(grid, p.incision, 12);
   soften(grid, p.creep, 8);
   slide(grid, p.talus, 30);
   easeBase(grid, baseLine);

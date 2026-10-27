@@ -8,7 +8,7 @@
   "incision": 1.2,
   "creep": 0,
   "talus": 45.5,
-  "bench": 0.975
+  "plateau": 0.975
  },
  "loss": 0.3600844558790389,
  "z": {

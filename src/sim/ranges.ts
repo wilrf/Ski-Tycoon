@@ -24,8 +24,8 @@ export interface RangeParams {
   readonly creep: number;
   /** Steepest angle rock holds, degrees; steeper ground slides until it reaches it. */
   readonly talus: number;
-  /** 0..1 flattening of the upper face into benches and broad tops. */
-  readonly bench: number;
+  /** 0..1 flattening of high ground into broad tops, like the Rockies' tundra benches. */
+  readonly plateau: number;
 }
 
 export const isRangeKey = (s: string): s is RangeKey => (RANGE_KEYS as readonly string[]).includes(s);

@@ -38,16 +38,20 @@ def slug(title: str) -> str:
 
 
 def find_summit(lat: float, lon: float, true_m: float | None) -> tuple[float, float, float]:
-    """Wikipedia coordinates can sit over a kilometre off, and a cliff-top summit can have higher ground behind it.
-    So: among local high points within 2 km, take the one whose height best matches the recorded summit height,
-    paying 1 m of mismatch per 5 m of distance. With no recorded height, the highest point within 500 m wins."""
+    """The summit is the highest point within 500 m of Wikipedia's coordinates, unless its height disagrees with the
+    recorded one. Then the coordinates are off (they can sit over a kilometre away) or the point is higher ground
+    behind a cliff top, so among local high points within 2 km the one whose height best matches the record wins,
+    paying 1 m of mismatch per 5 m of distance."""
     half, res = 2000.0, 10.0
     g = read_grid(lat, lon, 2 * half, res_m=res)
     yy, xx = (np.mgrid[:len(g), :len(g)] + 0.5) * res - half
     dist = np.hypot(xx, yy)
-    tops = (g == maximum_filter(g, 7))
-    cost = np.where(tops, np.abs(g - true_m) + dist / 5, np.inf) if true_m else np.where(dist <= 500, -g, np.inf)
-    r, c = np.unravel_index(np.argmin(cost), g.shape)
+    # The highest point near the given coordinates is the summit when its height agrees with the record (ice caps and
+    # tree canopy put the data up to ~60 m above it); only when it doesn't, search wider by height.
+    r, c = np.unravel_index(np.argmax(np.where(dist <= 500, g, -np.inf)), g.shape)
+    if true_m and abs(g[r, c] - true_m) > 60:
+        cost = np.where(g == maximum_filter(g, 7), np.abs(g - true_m) + dist / 5, np.inf)
+        r, c = np.unravel_index(np.argmin(cost), g.shape)
     la, lo = offset(lat, lon, xx[r, c], -yy[r, c])
     return float(la), float(lo), float(g[r, c])
 

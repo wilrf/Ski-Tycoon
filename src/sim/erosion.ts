@@ -47,19 +47,18 @@ function drainage({ size: n, h }: HeightGrid): { to: Int32Array; dist: Float64Ar
  * neighbour, so upslope area piles up downstream, and channels cut in proportion to sqrt(area) x slope. The result
  * is a branching drainage network with spurs left standing between the gullies.
  *
+ * Upslope area is measured with water shared among all lower neighbours (see spreadArea), so open slopes stay smooth
+ * and only true valleys gather enough water to cut. The cut itself goes to the single steepest neighbour, because
+ * the implicit update needs one outlet per cell.
+ *
  * Each pass uses the implicit update (Braun & Willett 2013): cells are solved outlet-first, so every cell's
  * outlet is already updated, and h' = (h + F h_out) / (1 + F) can never overshoot, however strong the incision.
  */
 export function incise(grid: HeightGrid, strength: number, passes: number): void {
   const h = grid.h;
-  const area = new Float64Array(h.length);
   for (let pass = 0; pass < passes; pass++) {
     const { to, dist, order } = drainage(grid);
-    area.fill(1);
-    for (let k = order.length - 1; k >= 0; k--) {
-      const i = order[k]!;
-      if (to[i] !== i) area[to[i]!] += area[i]!;
-    }
+    const area = spreadArea(grid);
     for (const i of order) {
       const r = to[i]!;
       if (r === i) continue;
@@ -67,6 +66,30 @@ export function incise(grid: HeightGrid, strength: number, passes: number): void
       h[i] = (h[i]! + f * h[r]!) / (1 + f);
     }
   }
+}
+
+/**
+ * Upslope area of every cell, in cells, with each cell's water shared among all its lower neighbours in proportion to
+ * slope^1.1 (Freeman 1991). Sending all of it to the steepest neighbour instead locks flow lines onto the grid's
+ * 0/45/90 degree directions, and incision then carves those as ruler-straight channels.
+ */
+function spreadArea({ size: n, h }: HeightGrid): Float64Array {
+  const area = new Float64Array(n * n).fill(1);
+  const order = Int32Array.from({ length: n * n }, (_, i) => i).sort((a, b) => h[b]! - h[a]!);
+  const share = new Float64Array(8);
+  for (const i of order) {
+    const x = i % n, y = (i - x) / n;
+    let total = 0;
+    for (let k = 0; k < 8; k++) {
+      const [dx, dy] = NEIGHBOURS[k]!, nx = x + dx, ny = y + dy;
+      const drop = nx < 0 || ny < 0 || nx >= n || ny >= n ? 0 : h[i]! - h[ny * n + nx]!;
+      share[k] = drop > 0 ? (drop / (dx && dy ? Math.SQRT2 : 1)) ** 1.1 : 0;
+      total += share[k]!;
+    }
+    if (total === 0) continue;
+    for (let k = 0; k < 8; k++) if (share[k]! > 0) area[(y + NEIGHBOURS[k]![1]) * n + x + NEIGHBOURS[k]![0]] += (area[i]! * share[k]!) / total;
+  }
+  return area;
 }
 
 /**
@@ -113,7 +136,8 @@ export function fillPits(grid: HeightGrid, tilt = 0.01): void {
       const j = ny * n + nx;
       if (done[j]) continue;
       done[j] = 1;
-      h[j] = Math.max(h[j]!, h[i]! + tilt);
+      // The tilt varies per cell so a filled flat drains along a winding path, not a ruler-straight one.
+      h[j] = Math.max(h[j]!, h[i]! + tilt * (0.25 + 1.5 * (((j * 2654435761) >>> 0) / 4294967296)));
       push(j);
     }
   }

@@ -244,6 +244,8 @@ function updateStill(ctx: CanvasRenderingContext2D, f: Frame): Still {
 }
 
 export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
+  // A canvas with no size yet (a page still laying out) would make a zero-size cached layer, and pasting that throws.
+  if (ctx.canvas.width === 0 || ctx.canvas.height === 0) return;
   const { world, ui, camera, view } = f;
   const resort = activeResort(world);
   const { at, px, stroke, drawRun, liftStructure } = painter(ctx, camera, view);

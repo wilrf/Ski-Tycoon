@@ -7,6 +7,10 @@
  * Score: mean over stats of ((generated mean - real mean) / real spread)^2, with generated stats averaged over three
  * seeds so no candidate wins by luck on one mountain. Search: 100 random candidates, then a pattern search that
  * nudges one knob at a time from the best, halving the nudge whenever a full sweep finds nothing better.
+ *
+ * The bounds keep every candidate natural-looking. The statistics can't see artifacts, so an unbounded search
+ * finds them: with no erosion it leaves noise blobs, and with smooth starting ground water carves ruler-straight
+ * channels. So erosion and starting relief both have floors.
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,8 +26,8 @@ const SEEDS = [11, 22, 33];
 const RANDOM = 100, MAX_EVALS = 400;
 
 const BOUNDS: Record<keyof RangeParams, readonly [number, number]> = {
-  relief: [150, 1400], profile: [0.7, 2.5], ridged: [0, 1], gain: [0.3, 0.7], spurs: [0, 1],
-  incision: [0, 8], creep: [0, 0.5], talus: [25, 60], bench: [0, 1],
+  relief: [150, 1400], profile: [0.7, 2.5], ridged: [0, 1], gain: [0.3, 0.7], spurs: [0.25, 1],
+  incision: [0.5, 8], creep: [0, 0.5], talus: [25, 60], plateau: [0, 1],
 };
 const KNOBS = Object.keys(BOUNDS) as (keyof RangeParams)[];
 
