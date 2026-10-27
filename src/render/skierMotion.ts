@@ -1,7 +1,7 @@
 import { CONFIG, type FeatureType } from '../config';
 import { pointAlong, vec, type Vec2 } from '../sim/geometry';
 import type { Run } from '../sim/runs';
-import type { Skier } from '../sim/skiers';
+import type { Skier, SkillLevel } from '../sim/skiers';
 
 /**
  * How a skier looks on a run, which the simulation doesn't model: it moves skiers straight down the run's
@@ -13,16 +13,63 @@ export interface SkierPose {
   readonly heading: number;
   /** Metres above the snow; above zero the skier is in the air over a jump. */
   readonly air: number;
+  readonly stance: Stance;
+  /** Carvers leave pencil-thin edge lines; skidders smear the snow. */
+  readonly carving: boolean;
 }
 
-/** Turn shape by skill: beginners make long, wide turns; experts make short, quick ones. Metres. */
-const TURN_LENGTH = [34, 26, 19, 14, 12] as const;
-const TURN_WIDTH = [6.5, 6, 5, 4, 3.5] as const;
 /**
- * How much skiers linger at the edge of each turn and then dart through the fall line, like a raindrop
- * that pauses and runs. Beginners hesitate before committing to the next turn; experts flow.
+ * How a skier skis. Skill makes each turn cleaner (less wobble) and widens the choice of turns: every
+ * beginner snowploughs, while pros and olympians pick between race turns, freeride lines and a tuck.
+ * Lengths and widths in metres; `rhythm` is how long they linger at a turn's edge before darting through
+ * the fall line; `shape` below 1 squares the swing off into the Z of a skidded turn.
  */
-const RHYTHM = [0.45, 0.35, 0.25, 0.15, 0.1] as const;
+interface Style {
+  readonly length: number;
+  readonly width: number;
+  readonly rhythm: number;
+  readonly shape: number;
+  readonly wobble: number;
+  /** Size of the snow thrown off each turn: skids throw lots, clean carves very little. */
+  readonly spray: number;
+  readonly stance: Stance;
+  readonly carves: boolean;
+}
+
+/** How the skis sit: a V for the snowplough, side by side, or tucked tight for speed. */
+export type Stance = 'wedge' | 'parallel' | 'tuck';
+
+const STYLES = {
+  snowplough: { length: 30, width: 5, rhythm: 0.45, shape: 1, wobble: 0.8, spray: 1.3, stance: 'wedge', carves: false },
+  stemChristie: { length: 26, width: 6, rhythm: 0.4, shape: 0.8, wobble: 0.5, spray: 1.2, stance: 'parallel', carves: false },
+  skidded: { length: 22, width: 6, rhythm: 0.35, shape: 0.55, wobble: 0.4, spray: 1.5, stance: 'parallel', carves: false },
+  carve: { length: 20, width: 5, rhythm: 0.25, shape: 1, wobble: 0.15, spray: 0.8, stance: 'parallel', carves: true },
+  shortTurns: { length: 10, width: 3, rhythm: 0.2, shape: 0.8, wobble: 0.1, spray: 1, stance: 'parallel', carves: false },
+  giantSlalom: { length: 30, width: 7, rhythm: 0.15, shape: 1, wobble: 0.05, spray: 0.5, stance: 'parallel', carves: true },
+  slalom: { length: 9, width: 2.5, rhythm: 0.1, shape: 1, wobble: 0.03, spray: 0.6, stance: 'parallel', carves: true },
+  freeride: { length: 40, width: 4, rhythm: 0.1, shape: 1, wobble: 0.05, spray: 0.7, stance: 'parallel', carves: true },
+  tuck: { length: 60, width: 1.5, rhythm: 0.05, shape: 1, wobble: 0, spray: 0.3, stance: 'tuck', carves: true },
+} as const satisfies Record<string, Style>;
+
+/** The styles each level can ski: one for beginners, two for intermediates and experts, three for pros, four for olympians. */
+const SKILL_STYLES: Record<SkillLevel, readonly Style[]> = {
+  0: [STYLES.snowplough],
+  1: [STYLES.skidded, STYLES.stemChristie],
+  2: [STYLES.carve, STYLES.shortTurns],
+  3: [STYLES.giantSlalom, STYLES.slalom, STYLES.freeride],
+  4: [STYLES.giantSlalom, STYLES.slalom, STYLES.freeride, STYLES.tuck],
+};
+
+/**
+ * The style a skier uses on this run. Experts read the terrain: short turns on steep runs, carves on
+ * gentler ones. Everyone else keeps the style that's theirs (by id) all day.
+ */
+function styleOf(s: Skier, run: Run): Style {
+  const styles = SKILL_STYLES[s.skill];
+  if (s.skill === 2) return run.profile.difficulty >= 2 ? STYLES.shortTurns : STYLES.carve;
+  return styles[s.id % styles.length]!;
+}
+
 /** Distance skiers straighten out over before a jump so they hit it square. Metres. */
 const RUN_IN = 12;
 const JUMPS: Partial<Record<FeatureType, { readonly length: number; readonly peak: number }>> = {
@@ -48,9 +95,8 @@ export interface Puff {
 const SPRAY_FADE = 4;
 /** Where in each turn the ski is loaded hardest: just past the fall line, in the lower half of the turn. */
 const SPRAY_AT = Math.PI / 2 + Math.PI / 6;
-/** Beginners skid and throw big, scrappy puffs; experts carve and throw a thin fan. */
-const SPRAY_SIZE = [1.5, 1.15, 0.8, 0.55, 0.5] as const;
-const SPRAY_COUNT = [9, 8, 6, 5, 5] as const;
+/** Puffs per turn; bigger sprays (see each style's `spray`) throw a few more. */
+const sprayCount = (size: number): number => Math.round(4 + size * 4);
 const LANDING_COUNT = 12;
 /** Figures are drawn well over life size so they read on the map; spray is scaled to match them. */
 const FIGURE_SCALE = 2.8;
@@ -63,7 +109,7 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
   const puffs: Puff[] = [];
 
   // The most recent hard-loaded point in the turn rhythm, and how far the skier has gone since.
-  const k = turnRate(s), theta = d * k + turnPhase(s);
+  const style = styleOf(s, run), k = (Math.PI * 2) / style.length, theta = d * k + turnPhase(s);
   const turn = Math.floor((theta - SPRAY_AT) / Math.PI);
   const back = (theta - SPRAY_AT - turn * Math.PI) / k;
   const side = d - back > 0 ? sideAt(s, run, d - back, scared) : 0;
@@ -71,12 +117,12 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
   if (back < SPRAY_FADE && side !== 0) {
     const { t, n } = frameAt(run, d - back), out = Math.sign(side);
     const angle = Math.atan2(n.y * out + t.y * 0.4, n.x * out + t.x * 0.4);
-    const size = SPRAY_SIZE[s.skill] * (scared ? 1.3 : 1);
-    spray(puffs, poseAt(s, run, d - back, scared).pos, angle, 0.6, SPRAY_COUNT[s.skill], size, back / SPRAY_FADE, s.id * 131 + turn);
+    const size = style.spray * (scared ? 1.3 : 1);
+    spray(puffs, poseAt(s, run, d - back, scared).pos, angle, 0.6, sprayCount(size), size, back / SPRAY_FADE, s.id * 131 + turn);
   }
 
   // The hockey stop at the bottom throws a growing fan of snow ahead, downhill of the sideways skis.
-  const stop = stopping(run, d);
+  const stop = styleOf(s, run).stance === 'wedge' ? 0 : stopping(run, d);
   if (stop > 0) {
     const { t } = frameAt(run, d);
     spray(puffs, poseAt(s, run, d, scared).pos, Math.atan2(t.y, t.x), 0.9, 10, 1.4 * stop, 0.35, s.id * 389 + run.id);
@@ -143,7 +189,6 @@ function onRun(s: Skier, runs: readonly Run[], alpha: number): { run: Run; d: nu
 }
 
 /** Each skier starts their turns at their own point in the rhythm so a crowd doesn't move in lockstep. */
-const turnRate = (s: Skier): number => (Math.PI * 2) / TURN_LENGTH[s.skill];
 const turnPhase = (s: Skier): number => (s.id * 2.399) % (Math.PI * 2);
 
 /** Direction of travel down the run line at `d`, and the normal to its left. */
@@ -173,26 +218,36 @@ function jumpAt(s: Skier, run: Run, d: number): { straighten: number; air: numbe
   return { straighten, air };
 }
 
-/** Warped turn phase: the same turn edges and fall-line crossings, but quick across the fall line and slow at the edge. */
-const warp = (s: Skier, theta: number): number => theta + (RHYTHM[s.skill] / 2) * Math.sin(2 * theta);
-
-/** How far to the side of the run line the skier is at `d`, in metres. */
+/**
+ * How far to the side of the run line the skier is at `d`, in metres. The warped phase keeps every turn's
+ * edge and fall-line crossing in place but changes the pace between them: quick across the fall line,
+ * slow at the turn's edge. Less skilled skiers also wobble off their line.
+ */
 function sideAt(s: Skier, run: Run, d: number, scared: boolean): number {
-  return Math.sin(warp(s, d * turnRate(s) + turnPhase(s))) * widthAt(s, run, d, scared);
+  const style = styleOf(s, run), theta = (d * Math.PI * 2) / style.length + turnPhase(s);
+  const swing = Math.sin(theta + (style.rhythm / 2) * Math.sin(2 * theta));
+  const shaped = Math.sign(swing) * Math.pow(Math.abs(swing), style.shape);
+  const wobble = style.wobble * Math.sin(d * 1.7 + s.id) * Math.sin(d * 0.63 + s.id * 3);
+  return (shaped * style.width + wobble) * jumpAt(s, run, d).straighten * (scared ? 1.3 : 1) * (1 - stopping(run, d));
 }
 
 function poseAt(s: Skier, run: Run, d: number, scared: boolean): SkierPose {
-  const { here, t, n } = frameAt(run, d);
-  const k = turnRate(s), theta = d * k + turnPhase(s), a = RHYTHM[s.skill];
-  const width = widthAt(s, run, d, scared);
-  const psi = warp(s, theta);
-  const side = Math.sin(psi) * width, drift = Math.cos(psi) * width * k * (1 + a * Math.cos(2 * theta));
-  // Into the stop, the skis swing across the hill, to the left or right as each skier prefers.
-  const stop = stopping(run, d), swing = (s.id % 2 === 0 ? 1 : -1) * (Math.PI / 2) * stop * stop * (3 - 2 * stop);
+  const at = (x: number): Vec2 => {
+    const { here, n } = frameAt(run, x), side = sideAt(s, run, x, scared);
+    return vec(here.x + n.x * side, here.y + n.y * side);
+  };
+  const pos = at(d), behind = at(Math.max(0, d - 0.5)), ahead = at(Math.min(run.profile.length, d + 0.5)), { t } = frameAt(run, d);
+  // Into the stop, the skis swing across the hill, to the left or right as each skier prefers. Beginners
+  // can't hockey stop: they push their snowplough wider instead.
+  const style = styleOf(s, run), stop = style.stance === 'wedge' ? 0 : stopping(run, d);
+  const swing = (s.id % 2 === 0 ? 1 : -1) * (Math.PI / 2) * stop * stop * (3 - 2 * stop);
   return {
-    pos: vec(here.x + n.x * side, here.y + n.y * side),
-    heading: Math.atan2(t.y + n.y * drift, t.x + n.x * drift) + swing,
+    pos,
+    // Settling into the stop, the line straightens back to the run's direction before the skis swing across.
+    heading: Math.atan2((1 - stop) * (ahead.y - behind.y) + stop * t.y, (1 - stop) * (ahead.x - behind.x) + stop * t.x) + swing,
     air: jumpAt(s, run, d).air,
+    stance: stop > 0.3 ? 'parallel' : style.stance,
+    carving: style.carves && !scared,
   };
 }
 
@@ -200,7 +255,3 @@ function poseAt(s: Skier, run: Run, d: number, scared: boolean): SkierPose {
 const STOP_LENGTH = 6;
 /** 0 until the last few metres of a run, rising to 1 at the bottom. */
 const stopping = (run: Run, d: number): number => Math.max(0, 1 - (run.profile.length - d) / STOP_LENGTH);
-
-/** How wide the skier is swinging at `d`: narrower running at a jump, and straightening out into the stop. */
-const widthAt = (s: Skier, run: Run, d: number, scared: boolean): number =>
-  TURN_WIDTH[s.skill] * jumpAt(s, run, d).straighten * (scared ? 1.3 : 1) * (1 - stopping(run, d));

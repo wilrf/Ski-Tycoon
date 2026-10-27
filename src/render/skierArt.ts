@@ -2,8 +2,11 @@ import { vec, type Vec2 } from '../sim/geometry';
 import { SELECTED } from './colors';
 import { scaleBucket, sprite } from './sprites';
 
-/** On skis, sitting on a lift (skis hidden under the chair), or walking with skis over the shoulder. */
-export type Pose = 'skis' | 'seated' | 'walking';
+/**
+ * On skis (side by side, in a snowplough wedge, or in a racer's tuck), sitting on a lift (skis hidden under
+ * the chair), or walking with skis over the shoulder.
+ */
+export type Pose = 'skis' | 'wedge' | 'tuck' | 'seated' | 'walking';
 
 /** Headings are snapped to this many directions for skier sprites; finer turns aren't visible at this size. */
 const HEADINGS = 32;
@@ -55,28 +58,34 @@ export function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: numbe
     ctx.fill();
   }
   ctx.rotate(heading);
-  if (pose === 'skis') {
+  if (pose === 'skis' || pose === 'wedge' || pose === 'tuck') {
     ctx.strokeStyle = '#20242c';
     ctx.lineCap = 'round';
     ctx.lineWidth = Math.max(1, u * 0.28);
-    for (const side of [-0.38, 0.38]) {
+    // A snowplough points the tips together and pushes the tails apart; a tuck keeps the skis tight.
+    const tail = pose === 'wedge' ? 1.05 : pose === 'tuck' ? 0.28 : 0.38, tip = pose === 'wedge' ? 0.12 : tail;
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(-u * 1.6, side * u);
-      ctx.lineTo(u * 1.8, side * u);
+      ctx.moveTo(-u * 1.6, side * tail * u);
+      ctx.lineTo(u * 1.8, side * tip * u);
       ctx.stroke();
     }
+    // Poles: planted out to the sides, or tucked back under the arms in a tuck.
     ctx.lineWidth = Math.max(0.6, u * 0.12);
     ctx.strokeStyle = '#8a8f99';
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(0, side * u * 0.55);
-      ctx.lineTo(-u * 1.1, side * u * 1.25);
+      if (pose === 'tuck') ctx.lineTo(-u * 1.5, side * u * 0.45);
+      else ctx.lineTo(-u * 1.1, side * u * 1.25);
       ctx.stroke();
     }
   }
   ctx.fillStyle = jacket;
   ctx.beginPath();
-  ctx.ellipse(-u * 0.1, 0, u * 0.55, u * 0.75, 0, 0, Math.PI * 2);
+  // Crouched low in a tuck, the body is a smaller, rounder shape from above.
+  if (pose === 'tuck') ctx.ellipse(-u * 0.05, 0, u * 0.5, u * 0.55, 0, 0, Math.PI * 2);
+  else ctx.ellipse(-u * 0.1, 0, u * 0.55, u * 0.75, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.lineWidth = 0.8;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';

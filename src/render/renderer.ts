@@ -12,8 +12,8 @@ import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
-import { airborne, drawPuffs, drawTrail, stampSkier } from './skierArt';
-import { skiingPose, snowPuffs, trailPoses } from './skierMotion';
+import { airborne, drawPuffs, drawTrail, stampSkier, type Pose } from './skierArt';
+import { skiingPose, snowPuffs, trailPoses, type Stance } from './skierMotion';
 import { stampPine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
@@ -346,7 +346,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (skiing && camera.zoom >= SPRAY_ZOOM) drawPuffs(ctx, snowPuffs(s, resort.runs, f.alpha), at, camera.zoom);
     const u = px(1.6, 1.8), jacket = skillJacket(s), heading = headings.get(s.id) ?? Math.PI / 2;
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
-    else stampSkier(ctx, p, heading, u, jacket, placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
+    else stampSkier(ctx, p, heading, u, jacket, skiing ? stancePose(skiing.stance) : placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
@@ -367,6 +367,8 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 
 const headings = new Map<number, number>();
 
+const stancePose = (stance: Stance): Pose => (stance === 'parallel' ? 'skis' : stance);
+
 /** The fresh lines behind skiers nearest the middle of the screen, under every figure. */
 function drawTrails(ctx: CanvasRenderingContext2D, shown: readonly Skier[], f: Frame, at: (p: Vec2) => Vec2): void {
   const runs = activeResort(f.world).runs, centre = vec(f.view.width / 2, f.view.height / 2);
@@ -377,8 +379,8 @@ function drawTrails(ctx: CanvasRenderingContext2D, shown: readonly Skier[], f: F
     .sort((a, b) => a.gap - b.gap)
     .slice(0, MAX_TRAILS);
   for (const { s } of skiing) {
-    const scared = s.state.kind === 'skiing' && s.state.scared;
-    drawTrail(ctx, trailPoses(s, runs, f.alpha), at, f.camera.zoom, s.skill >= 2 && !scared);
+    const trail = trailPoses(s, runs, f.alpha);
+    if (trail[0]) drawTrail(ctx, trail, at, f.camera.zoom, trail[0].carving);
   }
 }
 
