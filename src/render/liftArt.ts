@@ -134,7 +134,7 @@ function rider(ctx: CanvasRenderingContext2D, c: Vec2, heading: number, u: numbe
     ctx.strokeStyle = SELECTED;
     ctx.stroke();
   }
-  drawSkier(ctx, c, heading, u * (seated ? 0.8 : 1), r.jacket, seated, false, !seated);
+  drawSkier(ctx, c, heading, u * (seated ? 0.8 : 1), r.jacket, seated ? 'seated' : 'skis', false, !seated);
 }
 
 function chair(ctx: CanvasRenderingContext2D, c: Vec2, heading: number, u: number, color: string, seats: number, bubble: boolean, aboard: readonly Rider[]): void {
@@ -223,3 +223,68 @@ function tbar(ctx: CanvasRenderingContext2D, c: Vec2, heading: number, u: number
 
 /** How fast a lift preview's carriers move: the base speed for its type, since it has no tier yet. */
 export const baseSpeed = (type: LiftType): number => CONFIG.lifts[type].speed;
+
+/** Lift-line spacing in metres. Figures are drawn larger than life, so people stand further apart too. */
+const SLOT = 2.4;
+const LANE_GAP = 3.2;
+/** Metres downhill of the bottom station where the corral starts. */
+const CORRAL_START = 8;
+
+interface Slot {
+  readonly pos: Vec2;
+  readonly heading: number;
+}
+
+/** A longer line gets more lanes as well as longer ones, so the corral grows roughly square. */
+function corral(count: number): { lanes: number; perLane: number } {
+  const lanes = Math.max(1, Math.min(10, Math.ceil(Math.sqrt(count / 2))));
+  return { lanes, perLane: Math.max(4, Math.ceil(count / lanes)) };
+}
+
+function corralFrame(lift: Pick<LiftLine, 'bottom' | 'top'>, lanes: number) {
+  const length = dist(lift.bottom, lift.top);
+  const along = vec((lift.top.x - lift.bottom.x) / length, (lift.top.y - lift.bottom.y) / length);
+  const side = vec(-along.y, along.x);
+  /** World position `back` metres behind the station, in lane-space `lane` (lane 0 is the first lane's centre). */
+  const place = (back: number, lane: number): Vec2 => {
+    const across = (lane - (lanes - 1) / 2) * LANE_GAP;
+    return vec(lift.bottom.x - along.x * back + side.x * across, lift.bottom.y - along.y * back + side.y * across);
+  };
+  return { length, up: Math.atan2(along.y, along.x), place };
+}
+
+/**
+ * Where each person in a lift line stands: a serpentine corral like real resorts rope off, filling the lane
+ * nearest the station first and snaking back and forth, everyone facing the way the line moves.
+ */
+export function queueSlots(lift: Pick<LiftLine, 'bottom' | 'top'>, count: number): Slot[] {
+  if (count === 0 || dist(lift.bottom, lift.top) === 0) return [];
+  const { lanes, perLane } = corral(count);
+  const { up, place } = corralFrame(lift, lanes);
+  return Array.from({ length: count }, (_, i) => {
+    const lane = Math.floor(i / perLane), k = i % perLane;
+    // Odd lanes run the other way, so the line snakes from each lane's far end into the next.
+    const back = CORRAL_START + (lane % 2 === 0 ? k : perLane - 1 - k) * SLOT;
+    return { pos: place(back, lane), heading: lane % 2 === 0 ? up : up + Math.PI };
+  });
+}
+
+/** The rope lines between corral lanes, with a gap at alternate ends where the line turns. */
+export function drawCorral(ctx: CanvasRenderingContext2D, lift: Pick<LiftLine, 'bottom' | 'top'>, count: number, v: CarrierView): void {
+  if (count === 0 || v.zoom < DETAIL_ZOOM || dist(lift.bottom, lift.top) === 0) return;
+  const { lanes, perLane } = corral(count);
+  const { place } = corralFrame(lift, lanes);
+  const near = CORRAL_START - SLOT, far = CORRAL_START + perLane * SLOT;
+  ctx.strokeStyle = 'rgba(40, 90, 170, 0.75)';
+  ctx.lineWidth = Math.max(1, v.zoom * 0.3);
+  ctx.beginPath();
+  for (let j = 0; j <= lanes; j++) {
+    // Outer ropes run the full length; inner ones leave a gap at the end where the line turns.
+    const outer = j === 0 || j === lanes, turnAtFar = j % 2 === 1;
+    const a = v.at(place(outer || turnAtFar ? near : near + SLOT * 1.5, j - 0.5));
+    const b = v.at(place(outer || !turnAtFar ? far : far - SLOT * 1.5, j - 0.5));
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+}

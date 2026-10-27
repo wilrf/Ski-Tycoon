@@ -206,6 +206,14 @@ export function stampPine(ctx: CanvasRenderingContext2D, tree: Tree, c: Vec2, zo
   ctx.drawImage(image, c.x - before * zoom, c.y - before * zoom, span * zoom, span * zoom);
 }
 
+/** The trampled paths from the parking lot to the two big lodges, as quadratic curves: start, bend, end. */
+export const footpaths = (entrance: Vec2): [Vec2, Vec2, Vec2][] =>
+  ([[-160, -30], [155, -28]] as const).map(([x, y]) => [
+    vec(entrance.x + x * 0.3, entrance.y - 10),
+    vec(entrance.x + x * 0.6, entrance.y + y * 0.3),
+    vec(entrance.x + x, entrance.y + y),
+  ]);
+
 /** The base village: a plowed parking lot along the bottom edge and lodges with snow on their roofs. */
 function drawBase(ctx: CanvasRenderingContext2D, entrance: Vec2): void {
   const lot = { x: entrance.x - 110, y: entrance.y - 9, w: 220, h: 24 };
@@ -226,10 +234,10 @@ function drawBase(ctx: CanvasRenderingContext2D, entrance: Vec2): void {
   ctx.strokeStyle = 'rgba(150, 150, 165, 0.25)';
   ctx.lineWidth = 6;
   ctx.lineCap = 'round';
-  for (const [x, y] of [[-160, -30], [155, -28]] as const) {
+  for (const [from, via, to] of footpaths(entrance)) {
     ctx.beginPath();
-    ctx.moveTo(entrance.x + x * 0.3, entrance.y - 10);
-    ctx.quadraticCurveTo(entrance.x + x * 0.6, entrance.y + y * 0.3, entrance.x + x, entrance.y + y);
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(via.x, via.y, to.x, to.y);
     ctx.stroke();
   }
   lodge(ctx, vec(entrance.x - 160, entrance.y - 44), 52, 28);
