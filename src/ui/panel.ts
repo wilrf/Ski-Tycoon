@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { buildingInvested, nextLodgeUpgrade, seatsOf } from '../sim/buildings';
 import { income } from '../sim/economy';
 import { liftCapacity, liftTier, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
@@ -162,11 +163,31 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const building = resort.buildings.find((b) => b.id === selection.id);
     if (!building) return null;
     const spec = CONFIG.buildings[building.type];
-    const inside = resort.skiers.filter((s) => (s.state.kind === 'eating' || s.state.kind === 'toBuilding') && s.state.buildingId === building.id).length;
+    const inside = resort.skiers.filter((s) => 'buildingId' in s.state && s.state.buildingId === building.id).length;
+    const isLodge = building.type === 'lodge';
+    const next = nextLodgeUpgrade(building);
+    const drinks = CONFIG.apres.prices[resort.apresPrice];
+    const built = CONFIG.lodgeUpgrades.slice(0, building.upgrades).map((u) => u.name);
     return {
       title: building.name,
-      rows: [['Type', spec.label], ['Seats taken', `${inside} of ${spec.seats}`], ['Meal price', money(spec.mealPrice)], ['Meals today (resort)', String(resort.today.meals)]],
-      actions: [{ label: `Remove (refund ${money(spec.cost * CONFIG.economy.removalRefund)})`, action: 'remove' }, CLOSE],
+      rows: [
+        ['Type', spec.label],
+        ['Seats taken', `${inside} of ${seatsOf(building)}`],
+        ['Meal price', money(spec.mealPrice)],
+        ['Meals today (resort)', String(resort.today.meals)],
+        ...(isLodge ? [
+          ['Extensions', built.join(', ') || 'None yet'],
+          ['Après drinks', `${drinks.label}, ${money(drinks.drinkPrice)} each`],
+          ['Après today (resort)', `${resort.today.apresGuests} guests, ${money(world.company.today.apres)}`],
+        ] as const : []),
+      ],
+      note: isLodge ? 'From 2:30 PM until 8 PM the lodge bar serves après. Low prices bring more guests and loyalty; high prices earn more per drink but put some skiers off.' : undefined,
+      actions: [
+        ...(next ? [{ label: `Add ${next.name.toLowerCase()} (+${next.seats} seats, ${money(next.cost)})`, action: 'upgrade', primary: true, disabled: world.company.money < next.cost } as const] : []),
+        ...(isLodge ? [{ label: `Drinks: ${drinks.label}`, action: 'apresPrice' } as const] : []),
+        { label: `Remove (refund ${money(buildingInvested(building) * CONFIG.economy.removalRefund)})`, action: 'remove' },
+        CLOSE,
+      ],
     };
   }
 

@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
 import { income } from '../sim/economy';
 import { liftsFrom } from '../sim/network';
-import { activeResort, isClosed, type World } from '../sim/world';
+import { activeResort, isApres, isClosed, type World } from '../sim/world';
 import { clock, money, percent, requestTitle } from './format';
 
 export type MenuCommand = 'save' | 'load' | 'new' | 'pause';
@@ -45,7 +45,7 @@ export function createHud(h: HudHandlers): (world: World, speedIndex: number) =>
     const resort = activeResort(world);
     const { skiers } = resort;
     set(fields.day, `Day ${world.calendar.day}`);
-    set(fields.time, isClosed(world) ? 'Closed' : clock(world.calendar.time));
+    set(fields.time, isApres(world) ? `Après ${clock(world.calendar.time)}` : isClosed(world) ? 'Closed' : clock(world.calendar.time));
     set(fields.money, money(world.company.money));
     set(fields.skiers, String(skiers.length));
     set(fields.happiness, skiers.length ? percent(skiers.reduce((sum, s) => sum + s.happiness, 0) / skiers.length) : '–');
