@@ -11,8 +11,8 @@ import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
-import { airborne, stampSkier } from './skierArt';
-import { skiingPose } from './skierMotion';
+import { airborne, drawPuffs, stampSkier } from './skierArt';
+import { skiingPose, snowPuffs } from './skierMotion';
 import { stampPine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
@@ -33,6 +33,8 @@ export interface Frame {
 const TOWER_SPACING = 70;
 const UI_FONT = '"Nunito", system-ui, sans-serif';
 const VECTOR_TREE_ZOOM = 1.2;
+/** Snow spray is too small to see below this zoom, so it isn't worked out at all. */
+const SPRAY_ZOOM = 1.2;
 
 /** Helpers bound to one canvas and camera, shared by the still and live layers. */
 function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
@@ -336,6 +338,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (placed) headings.set(s.id, placed.heading);
     else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
+    if (skiing && camera.zoom >= SPRAY_ZOOM) drawPuffs(ctx, snowPuffs(s, resort.runs, f.alpha), at, camera.zoom);
     const u = px(1.6, 1.8), jacket = skillJacket(s), heading = headings.get(s.id) ?? Math.PI / 2;
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
     else stampSkier(ctx, p, heading, u, jacket, placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
