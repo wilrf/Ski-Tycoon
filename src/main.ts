@@ -2,12 +2,13 @@ import './style.css';
 import { CONFIG } from './config';
 import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
-import { clampCamera, fitCamera, pan, timeScaleAt, toWorld, zoomAt } from './render/camera';
+import { clampCamera, fitCamera, follow, pan, timeScaleAt, toWorld, zoomAt } from './render/camera';
 import { drawOverlay } from './render/overlay';
 import { draw } from './render/renderer';
+import { skiingPose } from './render/skierMotion';
 import { bakeTerrain } from './render/terrainArt';
 import { loadGame, saveGame } from './save/save';
-import type { Vec2 } from './sim/geometry';
+import { lerp, type Vec2 } from './sim/geometry';
 import { terrainExtent } from './sim/terrain';
 import { activeResort, applyCommand, createWorld, tick, type World, type WorldEvent } from './sim/world';
 import { fixFor } from './ui/fixes';
@@ -171,9 +172,12 @@ const renderPanel = createPanel(document.getElementById('panel')!, act, (price) 
 });
 const refreshToolbar = createToolbar(document.getElementById('toolbar')!, (choice) => selectTool(ui, toolFor(choice)));
 let speedBeforePause = 1;
+// The skier the camera rides along with in slow motion: set by tapping a skier, dropped by panning away.
+let following: number | null = null;
 
 attachPointer(canvas, {
   pan: (dx, dy) => {
+    following = null;
     pan(camera, dx, dy);
     clampCamera(camera, extent(), view);
   },
@@ -182,6 +186,7 @@ attachPointer(canvas, {
     // Hit radius is a fixed size on screen so small things stay tappable when zoomed out.
     const message = tapMap(world, ui, toWorld(camera, view, at), 14 / camera.zoom);
     if (message) toast(message);
+    following = ui.selection?.kind === 'skier' ? ui.selection.id : null;
   },
   hover: (at) => {
     ui.hover = at && toWorld(camera, view, at);
@@ -232,7 +237,8 @@ function frame(now: number): void {
   const { ticksPerSecond, speeds, maxTicksPerFrame } = CONFIG.loop;
   // Zoomed in, time slows so the player can follow a single skier (see CONFIG.loop.slowMotion).
   const timeScale = timeScaleAt(camera.zoom, speedIndex);
-  pendingTicks += (Math.min(now - lastFrame, 250) / 1000) * ticksPerSecond * speeds[speedIndex]! * timeScale;
+  const elapsed = Math.min(now - lastFrame, 250) / 1000;
+  pendingTicks += elapsed * ticksPerSecond * speeds[speedIndex]! * timeScale;
   lastFrame = now;
   // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
   const ticks = Math.min(Math.floor(pendingTicks), maxTicksPerFrame);
@@ -243,6 +249,7 @@ function frame(now: number): void {
     if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
     tick(world).forEach(onEvent);
   }
+  if (following !== null && timeScale < 1) followSkier(following, elapsed);
   const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex, timeScale };
   draw(ctx, frameState);
   drawOverlay(ctx, frameState);
@@ -252,3 +259,17 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/** Keeps the followed skier centred, wherever they're drawn: carving down a run, in a lift line or riding up. */
+function followSkier(id: number, seconds: number): void {
+  const resort = activeResort(world);
+  const s = resort.skiers.find((k) => k.id === id);
+  if (!s || ui.selection?.kind !== 'skier' || ui.selection.id !== id) {
+    following = null;
+    return;
+  }
+  const before = previous.get(id);
+  const at = skiingPose(s, resort.runs, pendingTicks)?.pos ?? (before ? lerp(before, s.pos, pendingTicks) : s.pos);
+  follow(camera, at, seconds);
+  clampCamera(camera, extent(), view);
+}
