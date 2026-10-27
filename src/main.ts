@@ -3,19 +3,21 @@ import { CONFIG } from './config';
 import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
 import { clampCamera, fitCamera, pan, toWorld, zoomAt } from './render/camera';
+import { drawOverlay } from './render/overlay';
 import { draw } from './render/renderer';
 import { bakeTerrain } from './render/terrainArt';
 import { loadGame, saveGame } from './save/save';
 import type { Vec2 } from './sim/geometry';
 import { terrainExtent } from './sim/terrain';
 import { activeResort, createWorld, tick, type World, type WorldEvent } from './sim/world';
-import { money } from './ui/format';
+import { money, requestTitle } from './ui/format';
 import { createHud, type MenuCommand } from './ui/hud';
+import { createMenus, type MenuChoice } from './ui/menu';
 import { createPanel, describePanel } from './ui/panel';
 import { mountIcons } from './ui/icons';
 import { createToast } from './ui/toast';
 import { createToolbar, toolFor } from './ui/toolbar';
-import { createUiState, runAction, selectTool, tapMap, type UiAction } from './ui/tools';
+import { createUiState, runAction, selectTool, strokeEnd, strokeMove, strokeStart, tapMap, type UiAction } from './ui/tools';
 
 mountIcons();
 const canvas = document.getElementById('map') as HTMLCanvasElement;
@@ -43,7 +45,8 @@ function loadSaved(): World | null {
 // ?seed=123 starts a fresh game on that mountain, so a mountain can be shared by link.
 const seedParam = new URLSearchParams(location.search).get('seed');
 const randomSeed = (): number => Date.now() % 1e9;
-let world = seedParam ? createWorld(Number(seedParam) || 0) : (loadSaved() ?? createWorld(randomSeed()));
+const saved = seedParam ? null : loadSaved();
+let world = seedParam ? createWorld(Number(seedParam) || 0) : (saved ?? createWorld(randomSeed()));
 let terrain = bakeTerrain(activeResort(world));
 const extent = (): number => terrainExtent(activeResort(world).terrain);
 const camera = fitCamera(extent(), view);
@@ -70,9 +73,10 @@ function save(): void {
 }
 
 function onEvent(e: WorldEvent): void {
-  const { stats, ledger } = e;
-  toast(`Day ${e.day} over: ${stats.arrivals} skiers, ${money(ledger.tickets)} in tickets. ${stats.leftHappy} went home happy, ${stats.leftUnhappy} unhappy.`, 6);
-  save();
+  if (e.type === 'requestDone') return toast(`✅ ${requestTitle(e.request)}: +${money(e.request.reward)}`, 5);
+  menus.showReport(e);
+  const store = storage();
+  if (store) saveGame(store, world);
 }
 
 function act(action: UiAction): void {
@@ -82,6 +86,7 @@ function act(action: UiAction): void {
 
 function menu(command: MenuCommand): void {
   if (command === 'save') return save();
+  if (command === 'pause') return openMenu();
   if (command === 'load') {
     const loaded = loadSaved();
     if (loaded) startWorld(loaded);
@@ -89,6 +94,35 @@ function menu(command: MenuCommand): void {
   }
   if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) startWorld(createWorld(randomSeed()));
 }
+
+// The game is paused while the start screen or pause menu is up.
+let speedBeforeMenu = 1;
+function openMenu(): void {
+  if (menus.isOpen()) return;
+  speedBeforeMenu = speedIndex || 1;
+  speedIndex = 0;
+  menus.showPause();
+}
+function closeMenu(): void {
+  menus.hide();
+  speedIndex = speedBeforeMenu;
+}
+function choose(choice: MenuChoice): void {
+  switch (choice) {
+    case 'continue': case 'resume': return closeMenu();
+    case 'save': save(); return closeMenu();
+    case 'load': menu('load'); return closeMenu();
+    case 'new': {
+      // A fresh, untouched mountain is already new; anything else asks first.
+      const untouched = world.calendar.day === 1 && activeResort(world).lifts.length === 0;
+      if (!untouched && !window.confirm('Start a new mountain? Anything since your last save will be lost.')) return;
+      if (!untouched) startWorld(createWorld(randomSeed()));
+      return closeMenu();
+    }
+    case 'help': return;
+  }
+}
+const menus = createMenus(choose);
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -100,7 +134,7 @@ function resize(): void {
   clampCamera(camera, extent(), view);
 }
 
-const refreshHud = createHud({ speed: (i) => void (speedIndex = i), menu });
+const refreshHud = createHud({ speed: (i) => void (speedIndex = i), menu, resort: () => act('resort') });
 const renderPanel = createPanel(document.getElementById('panel')!, act);
 const refreshToolbar = createToolbar(document.getElementById('toolbar')!, (choice) => selectTool(ui, toolFor(choice)));
 let speedBeforePause = 1;
@@ -119,6 +153,17 @@ attachPointer(canvas, {
   hover: (at) => {
     ui.hover = at && toWorld(camera, view, at);
   },
+  drawing: () => ui.tool.kind === 'run',
+  stroke: (phase, at) => {
+    const p = toWorld(camera, view, at);
+    if (phase === 'start') strokeStart(world, ui, p);
+    else if (phase === 'move') strokeMove(world, ui, p);
+    else if (phase === 'cancel') ui.stroking = false;
+    else {
+      const message = strokeEnd(world, ui, p);
+      if (message) toast(message);
+    }
+  },
 });
 
 attachKeyboard((command) => {
@@ -126,6 +171,7 @@ attachKeyboard((command) => {
     case 'action': return act(command.action);
     case 'tool': return selectTool(ui, toolFor(command.tool));
     case 'speed': return void (speedIndex = command.index);
+    case 'menu': return menus.isOpen() ? closeMenu() : openMenu();
     case 'togglePause':
       if (speedIndex > 0) speedBeforePause = speedIndex;
       speedIndex = speedIndex > 0 ? 0 : speedBeforePause;
@@ -139,6 +185,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && store) saveGame(store, world);
 });
 resize();
+if (!seedParam) {
+  speedIndex = 0;
+  menus.showStart(saved !== null);
+}
 
 // Fixed-timestep loop: the simulation always advances in whole ticks, however fast the screen refreshes.
 let lastFrame = performance.now();
@@ -147,16 +197,17 @@ function frame(now: number): void {
   const { ticksPerSecond, speeds, maxTicksPerFrame } = CONFIG.loop;
   pendingTicks += (Math.min(now - lastFrame, 250) / 1000) * ticksPerSecond * speeds[speedIndex]!;
   lastFrame = now;
-  for (let n = 0; pendingTicks >= 1; n++) {
-    // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
-    if (n === maxTicksPerFrame) pendingTicks = 0;
-    else {
-      previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
-      tick(world).forEach(onEvent);
-      pendingTicks--;
-    }
+  // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
+  const ticks = Math.min(Math.floor(pendingTicks), maxTicksPerFrame);
+  pendingTicks = ticks === maxTicksPerFrame ? 0 : pendingTicks - ticks;
+  for (let n = 0; n < ticks; n++) {
+    // Only the last tick's starting positions matter for drawing between ticks.
+    if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
+    tick(world).forEach(onEvent);
   }
-  draw(ctx, { world, ui, camera, view, terrain, previous, alpha: pendingTicks });
+  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks };
+  draw(ctx, frameState);
+  drawOverlay(ctx, frameState);
   refreshHud(world, speedIndex);
   renderPanel(describePanel(world, ui));
   refreshToolbar(ui);

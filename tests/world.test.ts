@@ -40,10 +40,11 @@ describe('world', () => {
       events.push(...tick(world));
       peak = Math.max(peak, activeResort(world).skiers.filter((s) => s.state.kind === 'skiing').length);
     }
-    const [ended] = events;
-    expect(ended?.type).toBe('dayEnded');
-    expect(ended!.stats.arrivals).toBeGreaterThan(100);
-    expect(world.company.money).toBe(afterBuild + ended!.stats.arrivals * CONFIG.economy.ticketPrice);
+    const ended = events.find((e) => e.type === 'dayEnded');
+    if (ended?.type !== 'dayEnded') throw new Error('The day never ended.');
+    expect(ended.stats.arrivals).toBeGreaterThan(100);
+    expect(ended.ledger.tickets).toBe(ended.stats.arrivals * CONFIG.economy.fairTicketPrice);
+    expect(world.company.money).toBe(afterBuild + ended.ledger.tickets + ended.ledger.food + ended.ledger.bonuses);
     expect(peak).toBeGreaterThan(0);
     expect(activeResort(world).skiers).toEqual([]);
   });

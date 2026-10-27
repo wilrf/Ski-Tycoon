@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type LiftType } from '../src/config';
 import { vec, type Vec2 } from '../src/sim/geometry';
-import { planLift, type Lift } from '../src/sim/lifts';
+import type { Lift } from '../src/sim/lifts';
 import { leadsSomewhere, liftsFrom, runsFromLift, type Mountain } from '../src/sim/network';
 import type { Run } from '../src/sim/runs';
-import { chooseRun, createSkier, updateSkier, type SkierContext, type SkillLevel } from '../src/sim/skiers';
-import { makeRun, plane, rng, runOf } from './helpers';
+import { chooseRun, updateSkier, type SkierContext, type SkillLevel } from '../src/sim/skiers';
+import { makeContext, makeLift as makeLiftOn, makeRun, makeSkier, plane, rng, runOf } from './helpers';
 
 const t = plane(0.3);
 
-function makeLift(id: number, bottom: Vec2, top: Vec2, type: LiftType = 'chairlift'): Lift {
-  const { length, rise } = planLift(t, [], 1e9, type, bottom, top);
-  return { id, name: `Lift ${id}`, type, bottom, top, length, rise, queue: [], boardCredit: 0 };
-}
+const makeLift = (id: number, bottom: Vec2, top: Vec2, type: LiftType = 'chairlift'): Lift => makeLiftOn(t, id, bottom, top, type);
 
 describe('run to lift connections', () => {
   const upper = makeLift(1, vec(300, 500), vec(300, 150));
@@ -78,16 +75,10 @@ describe('run choice by skill', () => {
 
 describe('skiers on the mountain', () => {
   const lift = makeLift(1, vec(500, 900), vec(500, 400));
-  const context = (runs: Run[]): SkierContext => ({
-    mountain: { terrain: t, lifts: [lift], runs },
-    rng: rng(3),
-    closed: false,
-    exit: vec(500, 990),
-    crowd: new Map(),
-  });
+  const context = (runs: Run[]): SkierContext => makeContext({ terrain: t, lifts: [lift], runs });
 
   function rideToTop(ctx: SkierContext, skill: SkillLevel) {
-    const s = { ...createSkier(1, vec(500, 950), rng()), skill };
+    const s = makeSkier(vec(500, 950), skill);
     lift.queue.length = 0;
     for (let i = 0; i < 2000 && s.state.kind !== 'queued'; i++) updateSkier(ctx, s, 1);
     lift.queue.length = 0;
@@ -98,7 +89,7 @@ describe('skiers on the mountain', () => {
 
   it('walks from the base to a lift and joins its line', () => {
     const ctx = context([]);
-    const s = createSkier(1, vec(450, 960), rng());
+    const s = makeSkier(vec(450, 960));
     for (let i = 0; i < 2000 && s.state.kind !== 'queued'; i++) updateSkier(ctx, s, 1);
     expect(s.state.kind).toBe('queued');
     expect(lift.queue).toContain(1);

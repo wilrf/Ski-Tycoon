@@ -1,17 +1,24 @@
-import type { LiftType } from '../config';
+import type { BuildingType, LiftType } from '../config';
 import type { UiAction } from '../ui/tools';
 
 export type KeyCommand =
   | { readonly type: 'action'; readonly action: UiAction }
-  | { readonly type: 'tool'; readonly tool: 'select' | 'run' | LiftType }
+  | { readonly type: 'tool'; readonly tool: 'select' | 'run' | LiftType | BuildingType }
   | { readonly type: 'speed'; readonly index: number }
-  | { readonly type: 'togglePause' };
+  | { readonly type: 'togglePause' }
+  | { readonly type: 'menu' };
 
 const BINDINGS: Readonly<Record<string, KeyCommand>> = {
   ' ': { type: 'togglePause' },
   '1': { type: 'speed', index: 1 },
   '2': { type: 'speed', index: 2 },
   '3': { type: 'speed', index: 3 },
+  '4': { type: 'speed', index: 4 },
+  m: { type: 'menu' },
+  p: { type: 'action', action: 'resort' },
+  l: { type: 'tool', tool: 'lodge' },
+  h: { type: 'tool', tool: 'hut' },
+  u: { type: 'action', action: 'upgrade' },
   Escape: { type: 'action', action: 'cancel' },
   Enter: { type: 'action', action: 'confirm' },
   Backspace: { type: 'action', action: 'undoPoint' },

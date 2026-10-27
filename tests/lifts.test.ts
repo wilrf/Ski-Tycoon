@@ -7,7 +7,7 @@ import { plane } from './helpers';
 const t = plane(0.3);
 
 function lift(overrides: Partial<Lift> = {}): Lift {
-  return { id: 1, name: 'Test Express', type: 'chairlift', bottom: vec(500, 800), top: vec(500, 200), length: 626, rise: 180, queue: [], boardCredit: 0, ...overrides };
+  return { id: 1, name: 'Test Express', type: 'chairlift', bottom: vec(500, 800), top: vec(500, 200), length: 626, rise: 180, queue: [], boardCredit: 0, tier: 0, invested: 0, ...overrides };
 }
 
 describe('lift throughput', () => {
@@ -20,7 +20,7 @@ describe('lift throughput', () => {
 
   it('boards in queue order', () => {
     const l = lift({ queue: [7, 8, 9] });
-    expect(boardLift(l, 2)).toEqual([7]);
+    expect(boardLift(l, 3)).toEqual([7]);
   });
 
   it('does not bank empty seats while nobody is waiting', () => {
@@ -59,7 +59,7 @@ describe('lift planning', () => {
   });
 
   it('enforces each type’s length and grade limits', () => {
-    expect(planLift(t, [], 1e9, 'ropeTow', vec(500, 800), vec(500, 300)).problems.some((p) => p.includes('at most'))).toBe(true);
+    expect(planLift(t, [], 1e9, 'ropeTow', vec(500, 850), vec(500, 0)).problems.some((p) => p.includes('at most'))).toBe(true);
     expect(planLift(plane(0.5), [], 1e9, 'ropeTow', vec(500, 800), vec(500, 600)).problems).toContain('Too steep for a rope tow.');
   });
 });
