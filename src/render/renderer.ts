@@ -1,3 +1,4 @@
+import { drawBaseBustle } from './baseArt';
 import { drawnSkiers } from './crowd';
 import { CONFIG, type Level } from '../config';
 import { clamp, dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
@@ -9,7 +10,7 @@ import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
-import { baseSpeed, cableGap, drawCarriers, type CarrierView, type Rider } from './liftArt';
+import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
 import { airborne, stampSkier } from './skierArt';
 import { skiingPose } from './skierMotion';
 import { stampPine, type TerrainArt } from './terrainArt';
@@ -310,19 +311,31 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     }
   }
 
+  drawBaseBustle(ctx, resort.entrance, time, resort.skiers.length, at, px(1.6, 1.8));
+
+  // Lift lines stand in roped corrals behind each bottom station instead of piling onto one spot.
+  const inLine = new Map<number, { pos: Vec2; heading: number }>();
+  for (const lift of resort.lifts) {
+    const slots = queueSlots(lift, lift.queue.length);
+    drawCorral(ctx, lift, lift.queue.length, carrierView);
+    lift.queue.forEach((id, i) => inLine.set(id, slots[i]!));
+  }
+
   for (const s of shown) {
     if (s.state.kind === 'riding') continue;
+    const queued = inLine.get(s.id);
     const prev = f.previous.get(s.id);
     const skiing = skiingPose(s, resort.runs, f.alpha);
-    const pos = skiing?.pos ?? (prev ? lerp(prev, s.pos, f.alpha) : s.pos);
+    const pos = skiing?.pos ?? queued?.pos ?? (prev ? lerp(prev, s.pos, f.alpha) : s.pos);
     const p = at(pos);
     if (p.x < -20 || p.y < -20 || p.x > view.width + 20 || p.y > view.height + 20) continue;
-    if (skiing) headings.set(s.id, skiing.heading);
+    const placed = skiing ?? queued;
+    if (placed) headings.set(s.id, placed.heading);
     else if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
     const u = px(1.6, 1.8), jacket = JACKETS[s.id % JACKETS.length]!, heading = headings.get(s.id) ?? Math.PI / 2;
     if (skiing && skiing.air > 0) airborne(ctx, p, heading, u, jacket, skiing.air * camera.zoom);
-    else stampSkier(ctx, p, heading, u, jacket, false, isSelected(ui, 'skier', s.id));
+    else stampSkier(ctx, p, heading, u, jacket, placed ? 'skis' : 'walking', isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
