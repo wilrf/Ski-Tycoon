@@ -72,6 +72,24 @@ def resolve(titles: list[str]) -> dict[str, dict]:
     return out
 
 
+def elevations(titles: list[str]) -> dict[str, float]:
+    """Summit height in metres from Wikidata (property P2044), keyed by Wikipedia title."""
+    q = urllib.parse.urlencode({"action": "query", "format": "json", "prop": "pageprops", "ppprop": "wikibase_item", "titles": "|".join(titles)})
+    items = {p["title"]: p["pageprops"]["wikibase_item"] for p in get_json(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["pages"].values() if "pageprops" in p}
+    q = urllib.parse.urlencode({"action": "wbgetentities", "format": "json", "props": "claims", "ids": "|".join(items.values())})
+    entities = get_json(f"https://www.wikidata.org/w/api.php?{q}")["entities"]
+    out = {}
+    for title, qid in items.items():
+        for claim in entities[qid]["claims"].get("P2044", []):
+            value = claim["mainsnak"].get("datavalue", {}).get("value")
+            if value and claim.get("rank") != "deprecated":
+                feet = value["unit"].endswith("Q3710")
+                out[title] = round(float(value["amount"]) * (0.3048 if feet else 1.0), 1)
+                if claim.get("rank") == "preferred":
+                    break
+    return out
+
+
 def pageviews(title: str) -> int:
     path = urllib.parse.quote(title.replace(" ", "_"), safe="")
     url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/{path}/monthly/{WINDOW[0]}/{WINDOW[1]}"
@@ -84,11 +102,12 @@ def main() -> None:
     for key, titles in CANDIDATES.items():
         print(key)
         found = resolve(titles)
-        rows = [{"key": key, **info, "views": pageviews(info["title"])} for info in found.values()]
+        heights = elevations([i["title"] for i in found.values()])
+        rows = [{"key": key, **info, "elevationM": heights.get(info["title"]), "views": pageviews(info["title"])} for info in found.values()]
         rows.sort(key=lambda r: -r["views"])
         ranked[key] = rows
         for r in rows:
-            print(f"  {r['views']:>9,}  {r['title']}")
+            print(f"  {r['views']:>9,}  {r['title']}  {r['elevationM']} m")
     (RESULTS / "peak-ranking.json").write_text(json.dumps({"window": WINDOW, "ranges": ranked}, indent=1, ensure_ascii=False))
 
 

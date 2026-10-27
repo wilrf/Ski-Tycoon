@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dem import read_grid
+from dem import crosses_tile, read_grid
 from zones import ZONES, Zone
 
 TILE_M = 10_000.0
@@ -43,7 +43,7 @@ def sample_zone(zone: Zone, seed: int) -> list[dict[str, float]]:
         # Batches keep the pool busy without fetching far past the quota.
         for start in range(0, MAX_TRIES, 16):
             batch = points[start:start + 16]
-            for (lat, lon), z in zip(batch, pool.map(lambda p: read_grid(*p, TILE_M), batch)):
+            for (lat, lon), z in zip(batch, pool.map(lambda p: None if crosses_tile(*p, TILE_M) else read_grid(*p, TILE_M), batch)):
                 if accept(z) and len(kept) < PER_ZONE:
                     np.save(out / f"{len(kept):03d}.npy", z.astype(np.float32))
                     kept.append({"lat": lat, "lon": lon})
