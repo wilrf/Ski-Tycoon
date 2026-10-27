@@ -2,7 +2,7 @@ import './style.css';
 import { CONFIG } from './config';
 import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
-import { clampCamera, fitCamera, follow, pan, timeScaleAt, toWorld, zoomAt } from './render/camera';
+import { clampCamera, fitCamera, follow, pan, toWorld, zoomAt } from './render/camera';
 import { drawOverlay } from './render/overlay';
 import { draw } from './render/renderer';
 import { skiingPose } from './render/skierMotion';
@@ -176,6 +176,7 @@ const refreshToolbar = createToolbar(document.getElementById('toolbar')!, (choic
 let speedBeforePause = 1;
 // The skier the camera rides along with in slow motion: set by tapping a skier, dropped by panning away.
 let following: number | null = null;
+const FOLLOW_ZOOM = 0.9;
 
 attachPointer(canvas, {
   pan: (dx, dy) => {
@@ -237,10 +238,8 @@ let lastFrame = performance.now();
 let pendingTicks = 0;
 function frame(now: number): void {
   const { ticksPerSecond, speeds, maxTicksPerFrame } = CONFIG.loop;
-  // Zoomed in, time slows so the player can follow a single skier (see CONFIG.loop.slowMotion).
-  const timeScale = timeScaleAt(camera.zoom, speedIndex);
   const elapsed = Math.min(now - lastFrame, 250) / 1000;
-  pendingTicks += elapsed * ticksPerSecond * speeds[speedIndex]! * timeScale;
+  pendingTicks += elapsed * ticksPerSecond * speeds[speedIndex]!;
   lastFrame = now;
   // Falling this far behind means the device can't keep up; drop the backlog rather than spiral.
   const ticks = Math.min(Math.floor(pendingTicks), maxTicksPerFrame);
@@ -251,8 +250,9 @@ function frame(now: number): void {
     if (n === ticks - 1) previous = new Map(activeResort(world).skiers.map((s) => [s.id, s.pos]));
     tick(world).forEach(onEvent);
   }
-  if (following !== null && timeScale < 1) followSkier(following, elapsed);
-  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex, timeScale };
+  // Zooming only changes the view; the camera rides along with a tapped skier once zoomed in close.
+  if (following !== null && camera.zoom >= FOLLOW_ZOOM) followSkier(following, elapsed);
+  const frameState = { world, ui, camera, view, terrain, previous, alpha: pendingTicks, speedIndex };
   draw(ctx, frameState);
   drawOverlay(ctx, frameState);
   refreshHud(world, speedIndex);
