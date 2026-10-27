@@ -7,6 +7,7 @@ import { activeResort, type World } from '../sim/world';
 import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
+import { drawRun as paintRun, type RunView } from './runArt';
 import { pine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
@@ -69,17 +70,13 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   };
   ctx.lineCap = ctx.lineJoin = 'round';
 
-  /** A run is a groomed swath cut through the terrain with its difficulty colour down the middle. */
-  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null): void => {
-    const width = px(22, 6);
-    path(points);
-    if (outline) stroke(outline, width + 6);
-    stroke('rgba(90, 110, 160, 0.45)', width + 3);
-    stroke('#fdfeff', width);
-    // Groomed corduroy, then the difficulty colour down the fall line.
-    if (camera.zoom > 1) stroke('rgba(150, 165, 200, 0.25)', width * 0.8, [1, 2]);
-    stroke(LEVEL_COLORS[level], px(3, 2));
+  const runView: RunView = {
+    zoom: camera.zoom,
+    at,
+    min: toWorld(camera, view, vec(0, 0)),
+    max: toWorld(camera, view, vec(view.width, view.height)),
   };
+  const drawRun = (points: readonly Vec2[], level: Level, outline: string | null): void => paintRun(ctx, points, level, outline, runView);
   for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected('run', run.id) ? SELECTED : null);
 
   for (const lift of resort.lifts) drawLift(lift, isSelected('lift', lift.id));
