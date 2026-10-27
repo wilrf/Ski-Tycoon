@@ -19,6 +19,19 @@ export interface LiftSpec {
   readonly maxGrade: number;
 }
 
+export interface LiftPartSpec {
+  readonly label: string;
+  readonly types: readonly LiftType[];
+  readonly levels: readonly { readonly name: string; readonly costFactor: number; readonly stars: number }[];
+  /** Per level owned: rope speed multiplier, capacity multiplier, queue mood multiplier, ride happiness. */
+  readonly speed?: readonly number[];
+  readonly capacity?: readonly number[];
+  readonly lineMood?: readonly number[];
+  readonly rideJoy?: readonly number[];
+  /** Wind holds only stop the lift if its top is above this share of the peak (above 1: never). */
+  readonly windHoldHeight?: readonly number[];
+}
+
 export interface LiftTier {
   readonly name: string;
   readonly speedFactor: number;
@@ -180,6 +193,51 @@ export const CONFIG = {
   } satisfies Record<LiftType, readonly LiftTier[]>,
   /** Stars needed before a lift type can be built. */
   liftStars: { ropeTow: 0, chairlift: 0, gondola: 3 } satisfies Record<LiftType, number>,
+  /**
+   * Parts each lift can upgrade one at a time, on top of its model tier. Each level costs a share of what the
+   * lift cost to build. Brand names are real for now and all live here, so they're easy to swap out.
+   */
+  liftParts: {
+    drive: {
+      label: 'Drive', types: ['ropeTow', 'chairlift', 'gondola'], speed: [1.1, 1.2, 1.3],
+      levels: [
+        { name: 'Gearbox overhaul', costFactor: 0.08, stars: 0 },
+        { name: 'Variable-frequency drive', costFactor: 0.15, stars: 1 },
+        { name: 'Leitner DirectDrive', costFactor: 0.3, stars: 3 },
+      ],
+    },
+    carriers: {
+      label: 'Carriers', types: ['ropeTow', 'chairlift', 'gondola'], capacity: [1.15, 1.3, 1.45],
+      levels: [
+        { name: 'More carriers on the line', costFactor: 0.1, stars: 0 },
+        { name: 'Tighter carrier spacing', costFactor: 0.18, stars: 2 },
+        { name: 'Doppelmayr high-capacity grips', costFactor: 0.3, stars: 3 },
+      ],
+    },
+    loading: {
+      label: 'Loading', types: ['ropeTow', 'chairlift', 'gondola'], lineMood: [0.8, 0.65, 0.5],
+      levels: [
+        { name: 'Maze and singles line', costFactor: 0.04, stars: 0 },
+        { name: 'Axess RFID gates', costFactor: 0.08, stars: 1 },
+        { name: 'Loading conveyor', costFactor: 0.15, stars: 2 },
+      ],
+    },
+    comfort: {
+      label: 'Seats', types: ['chairlift'], rideJoy: [1, 2, 3],
+      levels: [
+        { name: 'Padded seats', costFactor: 0.06, stars: 0 },
+        { name: 'Heated seats', costFactor: 0.12, stars: 2 },
+        { name: 'Bubble covers', costFactor: 0.25, stars: 3 },
+      ],
+    },
+    wind: {
+      label: 'Wind', types: ['ropeTow', 'chairlift'], windHoldHeight: [0.85, 1.01],
+      levels: [
+        { name: 'Anemometers and slow running', costFactor: 0.05, stars: 1 },
+        { name: 'Wind-stable sheaves and guides', costFactor: 0.15, stars: 3 },
+      ],
+    },
+  } satisfies Record<string, LiftPartSpec>,
   buildings: {
     lodge: { label: 'Base lodge', cost: 60_000, seats: 120, mealPrice: 18, stars: 0 },
     hut: { label: 'Mountain hut', cost: 140_000, seats: 50, mealPrice: 26, stars: 2 },

@@ -1,12 +1,12 @@
 import { CONFIG, type FeatureType, type LiftTier } from '../config';
 import { buildingInvested, nextLodgeUpgrade, seatsOf } from '../sim/buildings';
 import { income } from '../sim/economy';
-import { liftCapacity, liftTier, type Lift, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
+import { liftCapacity, liftTier, nextPartLevel, partCost, partLevel, partsFor, type Lift, type LiftPart, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
 import { featureUpkeep, funFor, profileRun, rateRun, runLevel } from '../sim/runs';
 import { weatherSpec } from '../sim/weather';
-import { activeResort, affordableLength, forecastDay, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
+import { activeResort, affordableLength, forecastDay, nextReviewDay, partProblem, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
 import { activityText, DIFFICULTY_NAMES, FEELING_EMOJI, feelingText, grade, metres, minutes, money, outOfTen, percent, requestTitle, SKILL_NAMES, stars, tallyText, thoughtText, weatherText } from './format';
 import { pendingLiftPlan, RESORT_TABS, runStartsConnected, type ResortTab, type UiAction, type UiState } from './tools';
@@ -44,6 +44,53 @@ const SKIER_GROUPS = ['beginners', 'intermediates', 'experts', 'pros', 'olympian
 
 const CLOSE: PanelButton = { label: 'Close', action: 'close' };
 const CANCEL: PanelButton = { label: 'Cancel', action: 'cancel' };
+
+const PART_EFFECT: Record<LiftPart, (level: number) => string> = {
+  drive: (l) => `+${Math.round((CONFIG.liftParts.drive.speed[l - 1]! - 1) * 100)}% rope speed`,
+  carriers: (l) => `+${Math.round((CONFIG.liftParts.carriers.capacity[l - 1]! - 1) * 100)}% capacity`,
+  loading: (l) => `waiting hurts ${Math.round((1 - CONFIG.liftParts.loading.lineMood[l - 1]!) * 100)}% less`,
+  comfort: (l) => (l >= 3 ? 'covered: cozy rides, runs in storms' : `+${CONFIG.liftParts.comfort.rideJoy[l - 1]} mood per ride`),
+  wind: (l) => (l >= 2 ? 'runs in any storm' : 'stays open in all but the worst wind'),
+};
+
+/** The lift's Upgrades tab: its model tier, then every part it can upgrade, each with what the next level does. */
+function describeLiftUpgrades(world: World, lift: Lift, tabs: NonNullable<PanelModel['tabs']>): PanelModel {
+  const next = nextTier(lift);
+  const problem = upgradeProblem(world, lift);
+  const parts = partsFor(lift.type);
+  // Never disabled: a click on a locked upgrade says what it needs, through the toast.
+  const partButton = (part: LiftPart): PanelButton | null => {
+    const level = nextPartLevel(lift, part);
+    if (!level) return null;
+    const locked = world.company.stars < level.stars;
+    return {
+      label: locked ? `${level.name} needs ${level.stars}★` : `${level.name} (${money(partCost(lift, part)!)})`,
+      action: `part:${part}`,
+      primary: partProblem(world, lift, part) === null,
+    };
+  };
+  return {
+    title: lift.name,
+    tabs,
+    rows: [
+      ['Model', CONFIG.liftTiers[lift.type].map((t, i) => (i === lift.tier ? `[${t.name}]` : i < lift.tier ? t.name : `${t.name} ${t.stars}★`)).join(' → ')],
+      ...(next ? upgradeRows(lift, next) : []),
+      ...parts.map((part) => {
+        const spec = CONFIG.liftParts[part];
+        const owned = partLevel(lift, part);
+        const now = owned > 0 ? `${spec.levels[owned - 1]!.name}: ${PART_EFFECT[part](owned)}` : 'Stock';
+        const then = owned < spec.levels.length ? ` → ${PART_EFFECT[part](owned + 1)}` : ' (max)';
+        return [`${spec.label} ${owned}/${spec.levels.length}`, `${now}${then}`] as const;
+      }),
+    ],
+    note: next && problem ? problem : 'Each part upgrades on its own. Stars unlock the top levels.',
+    actions: [
+      ...(next ? [{ label: world.company.stars < next.stars ? `${next.name} needs ${next.stars}★` : `Upgrade to ${next.name} (${money(upgradeCost(lift)!)})`, action: 'upgrade', primary: problem === null } as const] : []),
+      ...parts.map(partButton).filter((b): b is PanelButton => b !== null),
+      CLOSE,
+    ],
+  };
+}
 
 /** Before → after numbers for a lift's next upgrade. */
 function upgradeRows(lift: Lift, next: LiftTier): (readonly [string, string])[] {
@@ -162,8 +209,11 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const next = nextTier(lift);
     const problem = upgradeProblem(world, lift);
     const held = heldLifts(world, resort).has(lift.id);
+    const tabs = (['info', 'upgrades'] as const).map((t) => ({ label: t === 'info' ? 'Lift' : 'Upgrades', action: `liftTab:${t}` as const, active: t === ui.liftTab }));
+    if (ui.liftTab === 'upgrades') return describeLiftUpgrades(world, lift, tabs);
     return {
       title: lift.name,
+      tabs,
       rows: [
         ['Type', liftTier(lift).name],
         ['Length', metres(lift.length)],
@@ -173,15 +223,11 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
         ['In line', `${lift.queue.length} (wait ${minutes(waitSeconds(lift))})`],
         ['Riding', String(resort.skiers.filter((s) => s.state.kind === 'riding' && s.state.liftId === lift.id).length)],
         ['Runs from the top', runs.length === 0 ? 'None yet' : runs.map((r) => r.name).join(', ')],
-        ['Upgrade path', CONFIG.liftTiers[lift.type].map((t, i) => (i === lift.tier ? `[${t.name}]` : i < lift.tier ? t.name : `${t.name} ${t.stars}★`)).join(' → ')],
-        ...(next ? upgradeRows(lift, next) : []),
       ],
       note: held ? 'Stopped on wind hold. Covered seats (bubble chairs and gondolas) keep running in storms.'
         : runs.length === 0 ? 'Draw a run from the top station so skiers have somewhere to go.'
         : next && problem ? problem : undefined,
       actions: [
-        // Never disabled: a click on a locked upgrade says what it needs, through the toast.
-        ...(next ? [{ label: world.company.stars < next.stars ? `${next.name} needs ${next.stars}★` : `Upgrade to ${next.name} (${money(upgradeCost(lift)!)})`, action: 'upgrade', primary: problem === null } as const] : []),
         { label: `Remove (refund ${money(lift.invested * CONFIG.economy.removalRefund)})`, action: 'remove' },
         CLOSE,
       ],
@@ -288,7 +334,7 @@ function describeResort(world: World, tab: ResortTab): PanelModel {
   const tabs = RESORT_TABS.map((t) => ({ label: TAB_LABELS[t], action: `tab:${t}` as const, active: t === tab }));
   const base = { title: resort.name, tabs };
   const { everyDays } = CONFIG.review;
-  const nextReview = Math.ceil(world.calendar.day / everyDays) * everyDays;
+  const nextReview = nextReviewDay(world);
   switch (tab) {
     case 'overview':
       return {

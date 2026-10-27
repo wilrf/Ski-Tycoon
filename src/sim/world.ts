@@ -3,7 +3,7 @@ import { buildingInvested, buildingProblems, nextLodgeUpgrade, type Building } f
 import { build, createCompany, earn, emptyLedger, payUpkeep, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
 import { clamp, dist, pointAlong, vec, type Vec2 } from './geometry';
 import { newGuest, recordVisit, regularsComing, trimGuests, type Guest } from './guests';
-import { boardLift, liftCapacity, liftTier, nextTier, planLift, queueSpot, upgradeCost, waitSeconds, type Lift, type LiftPlan } from './lifts';
+import { boardLift, isCovered, liftCapacity, nextPartLevel, nextTier, partCost, partLevel, partsFor, windHoldHeight, type LiftPart, planLift, queueSpot, upgradeCost, waitSeconds, type Lift, type LiftPlan } from './lifts';
 import { isBase, liftsFrom, runAt, type Mountain } from './network';
 import { emptyWeek, landProblem, writeReview, type Review, type Week } from './progress';
 import { offerRequest, requestMet, type Request } from './requests';
@@ -78,6 +78,7 @@ export type Command =
   | { readonly type: 'buildLift'; readonly liftType: LiftType; readonly bottom: Vec2; readonly top: Vec2 }
   | { readonly type: 'removeLift'; readonly id: number }
   | { readonly type: 'upgradeLift'; readonly id: number }
+  | { readonly type: 'upgradeLiftPart'; readonly id: number; readonly part: LiftPart }
   | { readonly type: 'buildRun'; readonly points: readonly Vec2[] }
   | { readonly type: 'removeRun'; readonly id: number }
   | { readonly type: 'addFeature'; readonly runId: number; readonly featureType: FeatureType; readonly at: number }
@@ -192,8 +193,8 @@ const peakOf = (t: Terrain): number => peaks.get(t) ?? peaks.set(t, Math.max(...
 /** Lifts the wind has stopped today: exposed seats whose top station is high on the mountain. */
 export function heldLifts(world: World, resort: Resort): Set<number> {
   if (!weatherSpec(world.weather.today).windHold) return new Set();
-  const limit = peakOf(resort.terrain) * CONFIG.weather.windHoldHeight;
-  return new Set(resort.lifts.filter((l) => !liftTier(l).covered && heightAt(resort.terrain, l.top) > limit).map((l) => l.id));
+  const peak = peakOf(resort.terrain);
+  return new Set(resort.lifts.filter((l) => !isCovered(l) && heightAt(resort.terrain, l.top) > peak * windHoldHeight(l)).map((l) => l.id));
 }
 
 /** Advances the world by one fixed step of dt game seconds. */
@@ -456,12 +457,25 @@ export function buildingProblemsHere(world: World, type: BuildingType, p: Vec2):
 }
 
 /** Why a lift can't be upgraded right now, or null if it can. */
+/** Why the next level of a lift part can't be bought now, or null if it can. */
+export function partProblem(world: World, lift: Lift, part: LiftPart): string | null {
+  const spec = CONFIG.liftParts[part];
+  if (!partsFor(lift.type).includes(part)) return `A ${CONFIG.lifts[lift.type].label.toLowerCase()} has no ${spec.label.toLowerCase()} upgrades.`;
+  const next = nextPartLevel(lift, part);
+  if (!next) return `${spec.label} is fully upgraded.`;
+  if (world.company.stars < next.stars) return `${next.name} unlocks at ${next.stars}★. The next review is at the end of day ${nextReviewDay(world)}.`;
+  const cost = partCost(lift, part)!;
+  return cost > world.company.money ? `${next.name} costs $${cost.toLocaleString('en-US')}.` : null;
+}
+
+/** The day the magazine next reviews the resort, at the end of that day. */
+export const nextReviewDay = (world: World): number => Math.ceil(world.calendar.day / CONFIG.review.everyDays) * CONFIG.review.everyDays;
+
 export function upgradeProblem(world: World, lift: Lift): string | null {
   const next = nextTier(lift);
   if (!next) return 'This lift is already the best of its kind.';
   if (world.company.stars < next.stars) {
-    const review = Math.ceil(world.calendar.day / CONFIG.review.everyDays) * CONFIG.review.everyDays;
-    return `The ${next.name.toLowerCase()} unlocks at ${next.stars}★. You have ${world.company.stars}★; the next review is at the end of day ${review}.`;
+    return `The ${next.name.toLowerCase()} unlocks at ${next.stars}★. You have ${world.company.stars}★; the next review is at the end of day ${nextReviewDay(world)}.`;
   }
   const cost = upgradeCost(lift)!;
   return cost > world.company.money ? `The upgrade costs $${cost.toLocaleString('en-US')}.` : null;
@@ -486,6 +500,17 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
       if (!lift) return fail('That lift is already gone.');
       resort.lifts = resort.lifts.filter((l) => l !== lift);
       refund(company, lift.invested);
+      return { ok: true };
+    }
+    case 'upgradeLiftPart': {
+      const lift = resort.lifts.find((l) => l.id === cmd.id);
+      if (!lift) return fail('That lift is gone.');
+      const problem = partProblem(world, lift, cmd.part);
+      if (problem) return fail(problem);
+      const cost = partCost(lift, cmd.part)!;
+      build(company, cost);
+      lift.parts = { ...lift.parts, [cmd.part]: partLevel(lift, cmd.part) + 1 };
+      lift.invested += cost;
       return { ok: true };
     }
     case 'upgradeLift': {
@@ -569,8 +594,7 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
       const next = CONFIG.land[resort.land];
       if (!next) return fail('You already own the whole mountain.');
       if (company.stars < next.stars) {
-        const review = Math.ceil(world.calendar.day / CONFIG.review.everyDays) * CONFIG.review.everyDays;
-        return fail(`${next.name} goes on sale once you’re rated ${next.stars}★. You have ${company.stars}★; the next review is at the end of day ${review}.`);
+        return fail(`${next.name} goes on sale once you’re rated ${next.stars}★. You have ${company.stars}★; the next review is at the end of day ${nextReviewDay(world)}.`);
       }
       if (!build(company, next.cost)) return fail(`${next.name} costs $${next.cost.toLocaleString('en-US')}.`);
       resort.land++;

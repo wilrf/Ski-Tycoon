@@ -1,4 +1,4 @@
-import { CONFIG, type LiftTier, type LiftType } from '../config';
+import { CONFIG, type LiftPartSpec, type LiftTier, type LiftType } from '../config';
 import { dist, segmentDistance, vec, type Vec2 } from './geometry';
 import { heightAt, inBounds, type Terrain } from './terrain';
 
@@ -18,7 +18,33 @@ export interface Lift {
   tier: number;
   /** Everything spent on the lift, construction plus upgrades, so removal refunds a share of it all. */
   invested: number;
+  /** Levels bought of each part (drive, carriers...); missing means none. Older saves have no parts. */
+  parts?: Partial<Record<LiftPart, number>>;
 }
+
+export type LiftPart = keyof typeof CONFIG.liftParts;
+export const LIFT_PARTS = Object.keys(CONFIG.liftParts) as LiftPart[];
+type LiftStats = Pick<Lift, 'type' | 'tier' | 'parts'>;
+
+export const partLevel = (lift: LiftStats, part: LiftPart): number => lift.parts?.[part] ?? 0;
+/** The value a part gives at the level owned, or `none` without any. */
+const partValue = (lift: LiftStats, part: LiftPart, key: 'speed' | 'capacity' | 'lineMood' | 'rideJoy' | 'windHoldHeight', none: number): number => {
+  const level = partLevel(lift, part);
+  const values = (CONFIG.liftParts[part] as LiftPartSpec)[key];
+  return level > 0 && values ? values[level - 1]! : none;
+};
+export const partsFor = (type: LiftType): LiftPart[] => LIFT_PARTS.filter((p) => (CONFIG.liftParts[p].types as readonly LiftType[]).includes(type));
+export const nextPartLevel = (lift: Lift, part: LiftPart) => CONFIG.liftParts[part].levels[partLevel(lift, part)];
+export const partCost = (lift: Lift, part: LiftPart): number | undefined => {
+  const next = nextPartLevel(lift, part);
+  return next && Math.round(liftCost(lift.type, lift.length) * next.costFactor);
+};
+/** How much a minute in line hurts on this lift: queue lanes and fast gates make waiting easier. */
+export const lineMood = (lift: LiftStats): number => partValue(lift, 'loading', 'lineMood', 1);
+/** Happiness a ride gives: covered seats and gondolas, plus any seat upgrades. */
+export const rideJoy = (lift: LiftStats): number => (liftTier(lift).covered ? 2 : 0) + partValue(lift, 'comfort', 'rideJoy', 0);
+export const isCovered = (lift: LiftStats): boolean => liftTier(lift).covered || partLevel(lift, 'comfort') >= 3;
+export const windHoldHeight = (lift: LiftStats): number => partValue(lift, 'wind', 'windHoldHeight', CONFIG.weather.windHoldHeight);
 
 export interface LiftPlan {
   readonly type: LiftType;
@@ -35,8 +61,9 @@ export const liftCost = (type: LiftType, length: number): number =>
 
 export const liftTier = (lift: Pick<Lift, 'type' | 'tier'>): LiftTier => CONFIG.liftTiers[lift.type][lift.tier]!;
 export const nextTier = (lift: Pick<Lift, 'type' | 'tier'>): LiftTier | undefined => CONFIG.liftTiers[lift.type][lift.tier + 1];
-export const liftSpeed = (lift: Pick<Lift, 'type' | 'tier'>): number => CONFIG.lifts[lift.type].speed * liftTier(lift).speedFactor;
-export const liftCapacity = (lift: Pick<Lift, 'type' | 'tier'>): number => CONFIG.lifts[lift.type].capacityPerHour * liftTier(lift).capacityFactor;
+export const liftSpeed = (lift: LiftStats): number => CONFIG.lifts[lift.type].speed * liftTier(lift).speedFactor * partValue(lift, 'drive', 'speed', 1);
+export const liftCapacity = (lift: LiftStats): number =>
+  CONFIG.lifts[lift.type].capacityPerHour * liftTier(lift).capacityFactor * partValue(lift, 'carriers', 'capacity', 1);
 export const upgradeCost = (lift: Lift): number | undefined => {
   const next = nextTier(lift);
   return next && Math.round(liftCost(lift.type, lift.length) * next.upgradeCostFactor);
