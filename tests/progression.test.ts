@@ -228,3 +228,27 @@ describe('run rules', () => {
     expect(result).toMatchObject({ ok: false });
   });
 });
+
+describe('day report fixes', () => {
+  it('remembers where complaints happened and points at the culprit lift', async () => {
+    const { fixFor } = await import('../src/ui/fixes');
+    const { worstPlace } = await import('../src/sim/progress');
+    const world = builtWorld();
+    applyCommand(world, { type: 'setTicketPrice', price: 9 });
+    const report = playDay(world);
+    const tally = report.stats.feelings;
+    const lift = activeResort(world).lifts[0]!;
+    if (tally.longLine) {
+      expect(worstPlace(tally, 'longLine')).toBe(lift.name);
+    }
+    expect(fixFor(world, 'longLine', lift.name)?.target).toEqual({ kind: 'select', selection: { kind: 'lift', id: lift.id } });
+    expect(fixFor(world, 'overpriced', '')?.target).toEqual({ kind: 'action', action: 'resort' });
+  });
+
+  it('says why land is locked and when the next review is', () => {
+    const world = createWorld(7);
+    const result = applyCommand(world, { type: 'buyLand' });
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.reason).toContain(`end of day ${CONFIG.review.everyDays}`);
+  });
+});

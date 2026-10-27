@@ -540,7 +540,10 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
     case 'buyLand': {
       const next = CONFIG.land[resort.land];
       if (!next) return fail('You already own the whole mountain.');
-      if (company.stars < next.stars) return fail(`${next.name} goes on sale at ${next.stars}★.`);
+      if (company.stars < next.stars) {
+        const review = Math.ceil(world.calendar.day / CONFIG.review.everyDays) * CONFIG.review.everyDays;
+        return fail(`${next.name} goes on sale once you’re rated ${next.stars}★. You have ${company.stars}★; the next review is at the end of day ${review}.`);
+      }
       if (!build(company, next.cost)) return fail(`${next.name} costs $${next.cost.toLocaleString('en-US')}.`);
       resort.land++;
       return { ok: true };

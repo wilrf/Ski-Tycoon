@@ -1,9 +1,11 @@
 import './menu.css';
 import { CONFIG } from '../config';
 import { income } from '../sim/economy';
-import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
+import { GRIPES, PRAISE, topFeelings, worstPlace } from '../sim/progress';
+import type { FeelingKind } from '../sim/skiers';
 import type { DayReport } from '../sim/world';
-import { FEELING_EMOJI, money, quoteText, requestTitle, stars, tallyText, weatherText } from './format';
+import type { Fix, FixTarget } from './fixes';
+import { money, quoteText, requestTitle, stars, tallyText, weatherText } from './format';
 
 export type MenuChoice = 'continue' | 'new' | 'resume' | 'save' | 'load' | 'help';
 
@@ -17,25 +19,38 @@ const el = (tag: string, className = '', text = ''): HTMLElement => {
 const HELP: readonly (readonly [string, string])[] = [
   ['Open the mountain', 'Build a lift that starts in the flat base area at the bottom. Skiers only come once one does.'],
   ['Draw runs', 'Pick Run and drag down the mountain from a lift’s top station or from another run. The slope colours show how steep each spot is (green, blue, black, red for double black). The end snaps to a lift, the base or another run, and the run opens when you let go.'],
-  ['Watch your skiers', 'Emoji pop up when something changes how a skier feels. Tap a skier to see why, or open Resort to see what everyone is saying today.'],
+  ['Watch your skiers', 'Tap a skier to see how they feel and why, or open Resort to see what everyone is saying today. Each evening the day report pauses the game, lists the top complaints and takes you straight to the fix.'],
   ['Grow', 'Happy skiers come back, and beginners who enjoy your greens move up a level. Every few days a magazine rates you. Stars pay a bonus and unlock lifts, upgrades, huts and land further up the mountain.'],
   ['Earn', 'Set the ticket price in Resort: higher brings fewer, grumpier skiers. Lodges and huts sell lunch. Requests pay a bonus if you meet them in time.'],
   ['Weather', 'Check tomorrow’s forecast in the day report. Powder days pull in experts, and storms stop exposed lifts high on the mountain.'],
   ['Keys', 'Space pause, 1–4 speed, V select, T tow, C chair, G gondola, R run, L lodge, H hut, P resort, U upgrade, M menu, Esc cancel.'],
 ];
 
-/** The start screen and pause menu share one overlay; the day report is a card that doesn't stop the game. */
-export function createMenus(onChoice: (choice: MenuChoice) => void): {
+export interface ReportHandlers {
+  /** How to fix a complaint that happened most at `place`. */
+  fixFor(kind: FeelingKind, place: string): Fix | null;
+  /** The report was closed, by its button or by picking a fix. */
+  close(fix: FixTarget | null): void;
+}
+
+/** The start screen, pause menu and end-of-day report; each pauses the game while it's up. */
+export function createMenus(onChoice: (choice: MenuChoice) => void, handlers: ReportHandlers): {
   showStart(hasSave: boolean): void;
   showPause(): void;
   hide(): void;
   isOpen(): boolean;
   showReport(report: DayReport): void;
+  reportOpen(): boolean;
 } {
   const screen = document.body.appendChild(el('div', 'menu-screen'));
   screen.hidden = true;
-  const report = document.body.appendChild(el('aside', 'day-report'));
-  report.hidden = true;
+  const reportScreen = document.body.appendChild(el('div', 'menu-screen report-screen'));
+  reportScreen.hidden = true;
+  const report = reportScreen.appendChild(el('section', 'day-report'));
+  const closeReport = (fix: FixTarget | null): void => {
+    reportScreen.hidden = true;
+    handlers.close(fix);
+  };
 
   const render = (title: string, subtitle: string, choices: readonly (readonly [MenuChoice, string, boolean?])[]): void => {
     screen.replaceChildren();
@@ -77,11 +92,9 @@ export function createMenus(onChoice: (choice: MenuChoice) => void): {
       screen.hidden = true;
     },
     isOpen: () => !screen.hidden,
+    reportOpen: () => !reportScreen.hidden,
     showReport(r) {
       report.replaceChildren();
-      const close = report.appendChild(el('button', 'close', '✕')) as HTMLButtonElement;
-      close.title = 'Close';
-      close.addEventListener('click', () => void (report.hidden = true));
       report.appendChild(el('h2', '', `Day ${r.day} report`));
       const left = r.stats.leftHappy + r.stats.leftUnhappy;
       const happyShare = left ? Math.round((r.stats.leftHappy / left) * 100) : 0;
@@ -96,6 +109,7 @@ export function createMenus(onChoice: (choice: MenuChoice) => void): {
         ['Reputation', `${Math.round(r.reputation.before)}% → ${Math.round(r.reputation.after)}%`],
         ...(r.stats.movedUp ? [['Moved up a level', `${r.stats.movedUp} skiers`] as [string, string]] : []),
         ['Tomorrow', weatherText(r.forecast.today)],
+        ['Next review', `End of day ${Math.ceil((r.day + 1) / CONFIG.review.everyDays) * CONFIG.review.everyDays}`],
       ];
       const dl = report.appendChild(el('dl'));
       for (const [k, v] of rows) {
@@ -115,14 +129,30 @@ export function createMenus(onChoice: (choice: MenuChoice) => void): {
         for (const line of lines) ul.appendChild(el('li', '', line));
       };
       const tally = r.stats.feelings;
-      list('Skiers loved', topFeelings(tally, PRAISE, 3).map((k) => `${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`), 'good');
-      list('Skiers complained', topFeelings(tally, GRIPES, 3).map((k) => `${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`), 'bad');
+      list('Skiers loved', topFeelings(tally, PRAISE, 3).map((k) => tallyText(k, tally[k]!.count)), 'good');
+      const gripes = topFeelings(tally, GRIPES, 3);
+      if (gripes.length > 0) {
+        report.appendChild(el('h3', '', 'Skiers complained'));
+        const ul = report.appendChild(el('ul', 'gripes'));
+        for (const kind of gripes) {
+          const place = worstPlace(tally, kind);
+          const li = ul.appendChild(el('li'));
+          li.appendChild(el('span', 'bad', `${tallyText(kind, tally[kind]!.count)}${place ? `, mostly at ${place}` : ''}`));
+          const fix = handlers.fixFor(kind, place);
+          if (!fix) continue;
+          li.appendChild(el('p', 'advice', fix.advice));
+          const b = li.appendChild(el('button', '', fix.label)) as HTMLButtonElement;
+          b.addEventListener('click', () => closeReport(fix.target));
+        }
+      }
       list('Requests', [
         ...r.done.map((q) => `✅ ${requestTitle(q)}: +${money(q.reward)}`),
         ...r.failed.map((q) => `❌ ${requestTitle(q)}: missed`),
         ...r.offered.map((q) => `📋 New: ${requestTitle(q)}, ${money(q.reward)} by day ${q.deadline}`),
       ]);
-      report.hidden = false;
+      const start = report.appendChild(el('button', 'primary start-day', `Start day ${r.day + 1}`)) as HTMLButtonElement;
+      start.addEventListener('click', () => closeReport(null));
+      reportScreen.hidden = false;
     },
   };
 }

@@ -257,6 +257,13 @@ function describeResort(world: World): PanelModel {
   const tally = resort.today.feelings;
   const said = [...topFeelings(tally, PRAISE, 3), ...topFeelings(tally, GRIPES, 3)];
   const active = world.requests.filter((r) => r.status === 'active');
+  const { everyDays } = CONFIG.review;
+  const nextReview = Math.ceil(world.calendar.day / everyDays) * everyDays;
+  const landLocked = land && company.stars < land.stars;
+  const { fairTicketPrice } = CONFIG.economy;
+  const priceNote = resort.ticketPrice < fairTicketPrice * 0.7
+    ? 'Tickets this cheap pull in big crowds: expect long lines and packed runs, and less money per skier. '
+    : resort.ticketPrice > fairTicketPrice * 1.3 ? 'Tickets this dear keep skiers away, and the ones who come expect a lot. ' : '';
   return {
     title: resort.name,
     rows: [
@@ -267,15 +274,17 @@ function describeResort(world: World): PanelModel {
       ['Skiers today', `${resort.today.arrivals} (${resort.today.regulars} regulars)`],
       ['Today', weatherText(world.weather.today)],
       ['Tomorrow', weatherText(world.weather.tomorrow)],
-      ['Next land', land ? `${land.name}, ${land.stars}★` : 'All yours'],
+      ['Next review', `End of day ${nextReview}`],
+      ['Next land', land ? `${land.name}, ${landLocked ? `needs ${land.stars}★` : 'on sale'}` : 'All yours'],
       ...active.map((r) => [`📋 ${requestTitle(r)}`, `${money(r.reward)} · by day ${r.deadline}`] as const),
       ...said.map((k) => [`${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`, `${tally[k]!.delta >= 0 ? '+' : '−'}${Math.abs(Math.round(tally[k]!.delta))}`] as const),
     ],
-    note: `${CONFIG.review.magazine} reviews you every ${CONFIG.review.everyDays} days. Stars unlock lifts, upgrades, huts and land.`,
+    note: `${priceNote}${CONFIG.review.magazine} reviews you every ${everyDays} days. Stars unlock lifts, upgrades, huts and land.`,
     actions: [
       { label: '− $5', action: 'priceDown' },
       { label: '+ $5', action: 'priceUp' },
-      ...(land ? [{ label: `Buy land (${money(land.cost)})`, action: 'buyLand', primary: true, disabled: company.stars < land.stars || company.money < land.cost } as const] : []),
+      // Never disabled: a locked purchase still answers a click with why, through the toast.
+      ...(land ? [{ label: `Buy ${land.name} (${money(land.cost)})`, action: 'buyLand', primary: true } as const] : []),
       CLOSE,
     ],
   };
@@ -284,17 +293,24 @@ function describeResort(world: World): PanelModel {
 /** Renders panel models, rebuilding the DOM only when its structure changes so buttons stay tappable. */
 export function createPanel(el: HTMLElement, onAction: (action: UiAction) => void): (model: PanelModel | null) => void {
   let structure = '';
+  let labels: HTMLElement[] = [];
   let values: HTMLElement[] = [];
+  let buttons: HTMLButtonElement[] = [];
   let note: HTMLElement | null = null;
   el.addEventListener('click', (e) => {
     const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
     if (button && !button.disabled) onAction(button.dataset['action'] as UiAction);
   });
+  const set = (node: HTMLElement, text: string): void => {
+    if (node.textContent !== text) node.textContent = text;
+  };
 
+  // The DOM is rebuilt only when the panel's shape changes. Text and enabled states are updated in place,
+  // so a button under the pointer is never swapped out mid-click while the game runs.
   return (model) => {
     el.hidden = model === null;
     if (!model) return void (structure = '');
-    const key = JSON.stringify([model.title, model.accent, model.rows.map(([label]) => label), model.actions, model.note === undefined]);
+    const key = JSON.stringify([model.title, model.accent, model.rows.length, model.actions.map((a) => [a.action, a.primary]), model.note === undefined]);
     if (key !== structure) {
       structure = key;
       el.replaceChildren();
@@ -302,23 +318,28 @@ export function createPanel(el: HTMLElement, onAction: (action: UiAction) => voi
       title.textContent = model.title;
       if (model.accent) title.style.borderColor = model.accent;
       const table = el.appendChild(document.createElement('dl'));
-      values = model.rows.map(([label]) => {
-        table.appendChild(document.createElement('dt')).textContent = label;
+      labels = [];
+      values = model.rows.map(() => {
+        labels.push(table.appendChild(document.createElement('dt')));
         return table.appendChild(document.createElement('dd'));
       });
       note = model.note === undefined ? null : el.appendChild(document.createElement('p'));
       const bar = el.appendChild(document.createElement('div'));
       bar.className = 'actions';
-      for (const a of model.actions) {
+      buttons = model.actions.map((a) => {
         const b = bar.appendChild(document.createElement('button'));
-        b.textContent = a.label;
         b.dataset['action'] = a.action;
-        b.disabled = a.disabled ?? false;
         b.classList.toggle('primary', a.primary ?? false);
-      }
+        return b;
+      });
     }
-    model.rows.forEach(([, value], i) => {
-      if (values[i]!.textContent !== value) values[i]!.textContent = value;
+    model.rows.forEach(([label, value], i) => {
+      set(labels[i]!, label);
+      set(values[i]!, value);
+    });
+    model.actions.forEach((a, i) => {
+      set(buttons[i]!, a.label);
+      buttons[i]!.disabled = a.disabled ?? false;
     });
     if (note && note.textContent !== model.note) note.textContent = model.note ?? '';
   };

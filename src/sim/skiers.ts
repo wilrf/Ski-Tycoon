@@ -51,7 +51,13 @@ export interface Quote {
 }
 
 /** Today's feelings across the whole resort: how many skiers felt each, and the total happiness change. */
-export type FeelingTally = Partial<Record<FeelingKind, { count: number; delta: number }>>;
+export interface TallyEntry {
+  count: number;
+  delta: number;
+  /** How often it happened at each lift, run or building, so the day report can point at the worst one. */
+  places?: Record<string, number>;
+}
+export type FeelingTally = Partial<Record<FeelingKind, TallyEntry>>;
 
 /** Where feelings are recorded beyond the skier: the day's tally, and the latest quote of each kind. */
 export interface Journal {
@@ -162,6 +168,7 @@ export function feel(journal: Journal, time: number, s: Skier, kind: FeelingKind
   total.delta += delta;
   if (last && last.kind === kind && last.place === place) return void (last.delta += delta);
   total.count++;
+  if (place) (total.places ??= {})[place] = (total.places[place] ?? 0) + 1;
   s.log.push({ kind, place, delta });
   if (s.log.length > CONFIG.skiers.logLength) s.log.shift();
   s.felt = { kind, at: time };
