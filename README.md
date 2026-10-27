@@ -2,7 +2,7 @@
 
 A ski resort tycoon game for the browser, on desktop and phone. Build lifts, draw runs down a procedurally generated mountain, and watch skiers decide where to go.
 
-**Play:** https://wilrf.github.io/ski-tycoon/
+**Play:** https://wilrf.github.io/Ski-Tycoon/
 
 This is Milestone 1, the core toy: one mountain, three lift types, runs whose colour comes from the terrain, and skier agents with skill, happiness, energy and thoughts.
 
