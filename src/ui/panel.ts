@@ -1,9 +1,9 @@
-import { CONFIG } from '../config';
+import { CONFIG, type FeatureType } from '../config';
 import { income } from '../sim/economy';
 import { liftCapacity, liftTier, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
-import { funFor, profileRun, rateRun } from '../sim/runs';
+import { featureUpkeep, funFor, profileRun, rateRun } from '../sim/runs';
 import { weatherSpec } from '../sim/weather';
 import { activeResort, affordableLength, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
@@ -24,6 +24,10 @@ export interface PanelModel {
   readonly note?: string | undefined;
   readonly actions: readonly PanelButton[];
 }
+
+const FEATURE_TYPES = Object.keys(CONFIG.features) as FeatureType[];
+const SKILL_LEVELS = [0, 1, 2, 3] as const;
+const SKIER_GROUPS = ['beginners', 'intermediates', 'advanced skiers', 'experts'] as const;
 
 const CLOSE: PanelButton = { label: 'Close', action: 'close' };
 const CANCEL: PanelButton = { label: 'Cancel', action: 'cancel' };
@@ -60,6 +64,28 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
       ],
       note: plan.problems.join(' ') || (tool.top ? 'Ready to build.' : 'Tap to place the top station.'),
       actions: [{ label: `Build for ${money(plan.cost)}`, action: 'confirm', primary: true, disabled: !tool.top || plan.problems.length > 0 }, CANCEL],
+    };
+  }
+
+  if (tool.kind === 'feature') {
+    const run = resort.runs.find((r) => r.id === tool.runId);
+    if (!run) return null;
+    const spec = CONFIG.features[tool.featureType];
+    const loves = SKILL_LEVELS.filter((skill) => spec.appeal[skill] >= 0.5).map((skill) => SKIER_GROUPS[skill]);
+    return {
+      title: `${spec.label} on ${run.name}`,
+      accent: LEVEL_COLORS[run.profile.difficulty],
+      rows: [
+        ['Cost', money(spec.cost)],
+        ['Upkeep', `${money(spec.upkeepPerDay)} a day`],
+        ['Loved by', loves.join(', ')],
+        ['On this run', `${run.features.length} of ${CONFIG.featureRules.maxPerRun}`],
+      ],
+      note: `Tap a spot on ${run.name}. Skiers who like it choose this run more often and enjoy it more; anyone else rides around it.`,
+      actions: [
+        ...FEATURE_TYPES.map((type) => ({ label: `${CONFIG.features[type].label} ${money(CONFIG.features[type].cost)}`, action: `feature:${type}`, primary: type === tool.featureType } as const)),
+        { label: 'Done', action: 'cancel' },
+      ],
     };
   }
 
@@ -152,9 +178,17 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
         ['Skiers on it', String(onRun)],
         ['Branches', branchesOf(resort, run).map((b) => b.run.name).join(', ') || 'None'],
         ['Leads to', endsAt.join(', ') || 'Nowhere'],
+        ['Curves', run.profile.curviness >= CONFIG.runs.fullCurviness ? 'Plenty' : run.profile.curviness >= CONFIG.runs.fullCurviness / 3 ? 'Some' : 'Straight'],
+        ['Features', run.features.map((f) => CONFIG.features[f.type].label).join(', ') || 'None'],
+        ...(run.features.length > 0 ? [['Feature upkeep', `${money(featureUpkeep(run))} a day`] as const] : []),
       ],
       note: leadsSomewhere(resort, run) ? 'Fun is out of 10 for beginners · intermediates · advanced · experts. Skiers like runs at their own level.' : 'This run ends nowhere, so skiers won’t use it.',
-      actions: [{ label: 'Remove', action: 'remove' }, CLOSE],
+      actions: [
+        { label: 'Add feature', action: 'addFeature', primary: true },
+        ...(run.features.length > 0 ? [{ label: 'Clear features', action: 'clearFeatures' } as const] : []),
+        { label: 'Remove', action: 'remove' },
+        CLOSE,
+      ],
     };
   }
 

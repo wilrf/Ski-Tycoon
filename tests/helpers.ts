@@ -15,7 +15,7 @@ export const rng = (seed = 1) => createRng(seed);
 
 let nextId = 1000;
 export function makeRun(t: Terrain, points: Vec2[], name = 'Test'): Run {
-  return { id: nextId++, name, points, profile: profileRun(t, points) };
+  return { id: nextId++, name, points, profile: profileRun(t, points), features: [] };
 }
 
 /** A run with a fixed difficulty, for choice tests that don't care about terrain. */
@@ -23,7 +23,8 @@ export const runOf = (difficulty: Difficulty): Run => ({
   id: nextId++,
   name: `D${difficulty}`,
   points: [vec(0, 0), vec(0, 100)],
-  profile: { length: 100, vertical: 30, steepestGrade: 0.3, difficulty },
+  profile: { length: 100, vertical: 30, steepestGrade: 0.3, difficulty, curviness: 0 },
+  features: [],
 });
 
 export function makeLift(t: Terrain, id: number, bottom: Vec2, top: Vec2, type: LiftType = 'chairlift'): Lift {

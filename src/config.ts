@@ -57,6 +57,20 @@ export interface BuildingSpec {
   readonly stars: number;
 }
 
+/** Things built onto a run to make it more interesting, from kids' adventure zones to terrain park jumps. */
+export type FeatureType = 'rollers' | 'berms' | 'tunnel' | 'smallJump' | 'mediumJump' | 'largeJump';
+
+export interface FeatureSpec {
+  readonly label: string;
+  /** How a skier names it: "Loved the berms on Raven Ridge". */
+  readonly noun: string;
+  readonly cost: number;
+  /** Cat hours and park crew to keep it shaped. */
+  readonly upkeepPerDay: number;
+  /** How much beginners, intermediates, advanced and experts like it, 0 to 1. Anyone at 0 rides around it. */
+  readonly appeal: readonly [number, number, number, number];
+}
+
 export const CONFIG = {
   loop: {
     /** A 7-hour ski day takes about 4 real minutes at 1×. */
@@ -87,6 +101,30 @@ export const CONFIG = {
     minDropPerPoint: 1,
     /** Fun multiplier for each level a run sits below the skier's skill. */
     belowSkillFun: 0.65,
+    /** Turning is only counted where the ground is at least this steep, so a winding cat track isn't fun. */
+    curveMinGrade: 0.1,
+    /** Radians of turning per 100 m that earn the full curve bonus: about 70°, a run that swings side to side. */
+    fullCurviness: 1.2,
+    /** Fun that a well-curved run adds for everyone. */
+    curveFun: 1,
+  },
+  /** Prices are scaled to the game's lifts (a chair starts at $80k), not real dollars. */
+  features: {
+    rollers: { label: 'Rollers', noun: 'the rollers', cost: 6_000, upkeepPerDay: 100, appeal: [1, 0.6, 0.2, 0.1] },
+    berms: { label: 'Berms', noun: 'the berms', cost: 10_000, upkeepPerDay: 150, appeal: [0.8, 1, 0.6, 0.4] },
+    tunnel: { label: 'Adventure tunnel', noun: 'the tunnel', cost: 25_000, upkeepPerDay: 200, appeal: [1, 0.5, 0.2, 0] },
+    smallJump: { label: 'Small jump', noun: 'the small jump', cost: 12_000, upkeepPerDay: 250, appeal: [0.3, 1, 0.5, 0.2] },
+    mediumJump: { label: 'Medium jump', noun: 'the medium jump', cost: 25_000, upkeepPerDay: 450, appeal: [0, 0.3, 1, 0.6] },
+    largeJump: { label: 'Large jump', noun: 'the large jump', cost: 50_000, upkeepPerDay: 800, appeal: [0, 0, 0.4, 1] },
+  } satisfies Record<FeatureType, FeatureSpec>,
+  featureRules: {
+    maxPerRun: 4,
+    /** Metres between features, and from either end of the run. */
+    spacing: 40,
+    /** Fun each point of appeal adds. */
+    funPerAppeal: 1.5,
+    /** Features and curves together add at most this much fun, and never more than the run already has. */
+    maxFun: 3,
   },
   lifts: {
     ropeTow: { label: 'Rope tow', baseCost: 8_000, costPerMetre: 40, speed: 3, capacityPerHour: 700, upkeepPerDay: 150, maxLength: 800, maxGrade: 0.35 },

@@ -209,10 +209,12 @@ describe('save upgrade', () => {
       }],
     };
     const loaded = deserialize(JSON.stringify({ version: 1, savedAt: '', world: v1 }));
-    expect(SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSION).toBe(3);
     if (!loaded.ok) throw new Error(loaded.error);
     expect(activeResort(loaded.world).lifts[0]!.tier).toBe(0);
     expect(activeResort(loaded.world).runs).toHaveLength(1);
+    expect(activeResort(loaded.world).runs[0]!.features).toEqual([]);
+    expect(loaded.world.company.today.upkeep).toBe(0);
     expect(loaded.world.company.money).toBe(1234);
     playDay(loaded.world);
   });
