@@ -459,7 +459,10 @@ export function buildingProblemsHere(world: World, type: BuildingType, p: Vec2):
 export function upgradeProblem(world: World, lift: Lift): string | null {
   const next = nextTier(lift);
   if (!next) return 'This lift is already the best of its kind.';
-  if (world.company.stars < next.stars) return `The ${next.name.toLowerCase()} unlocks at ${next.stars}★.`;
+  if (world.company.stars < next.stars) {
+    const review = Math.ceil(world.calendar.day / CONFIG.review.everyDays) * CONFIG.review.everyDays;
+    return `The ${next.name.toLowerCase()} unlocks at ${next.stars}★. You have ${world.company.stars}★; the next review is at the end of day ${review}.`;
+  }
   const cost = upgradeCost(lift)!;
   return cost > world.company.money ? `The upgrade costs $${cost.toLocaleString('en-US')}.` : null;
 }
