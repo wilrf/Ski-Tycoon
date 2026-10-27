@@ -6,10 +6,10 @@ import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } 
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
 import { featureUpkeep, funFor, profileRun, rateRun } from '../sim/runs';
 import { weatherSpec } from '../sim/weather';
-import { activeResort, affordableLength, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
+import { activeResort, affordableLength, forecastDay, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
 import { activityText, DIFFICULTY_NAMES, FEELING_EMOJI, feelingText, grade, metres, minutes, money, outOfTen, percent, requestTitle, SKILL_NAMES, stars, tallyText, thoughtText, weatherText } from './format';
-import { pendingLiftPlan, runStartsConnected, type UiAction, type UiState } from './tools';
+import { pendingLiftPlan, RESORT_TABS, runStartsConnected, type ResortTab, type UiAction, type UiState } from './tools';
 
 export interface PanelButton {
   readonly label: string;
@@ -18,9 +18,21 @@ export interface PanelButton {
   readonly disabled?: boolean;
 }
 
+export interface PanelSlider {
+  readonly label: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly value: number;
+}
+
 export interface PanelModel {
   readonly title: string;
   readonly accent?: string | undefined;
+  /** Tab buttons along the top; the active one is highlighted. */
+  readonly tabs?: readonly (PanelButton & { readonly active: boolean })[];
+  /** A slider with a typed box beside it, for the ticket price. */
+  readonly slider?: PanelSlider;
   readonly rows: readonly (readonly [label: string, value: string])[];
   readonly note?: string | undefined;
   readonly actions: readonly PanelButton[];
@@ -125,7 +137,7 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     };
   }
 
-  if (selection?.kind === 'resort') return describeResort(world);
+  if (selection?.kind === 'resort') return describeResort(world, ui.resortTab);
 
   if (selection?.kind === 'lift') {
     const lift = resort.lifts.find((l) => l.id === selection.id);
@@ -249,50 +261,99 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
   return null;
 }
 
-/** The resort overview: rating, money, price, land, requests and what skiers are saying today. */
-function describeResort(world: World): PanelModel {
+const TAB_LABELS: Record<ResortTab, string> = { overview: 'Overview', prices: 'Prices', goals: 'Goals', land: 'Land' };
+
+/** The resort window, in tabs: how it's doing, what tickets cost, what to aim for, and land to buy. */
+function describeResort(world: World, tab: ResortTab): PanelModel {
   const resort = activeResort(world);
   const { company } = world;
-  const land = CONFIG.land[resort.land];
-  const tally = resort.today.feelings;
-  const said = [...topFeelings(tally, PRAISE, 3), ...topFeelings(tally, GRIPES, 3)];
-  const active = world.requests.filter((r) => r.status === 'active');
+  const tabs = RESORT_TABS.map((t) => ({ label: TAB_LABELS[t], action: `tab:${t}` as const, active: t === tab }));
+  const base = { title: resort.name, tabs };
   const { everyDays } = CONFIG.review;
   const nextReview = Math.ceil(world.calendar.day / everyDays) * everyDays;
-  const landLocked = land && company.stars < land.stars;
-  const { fairTicketPrice } = CONFIG.economy;
-  const priceNote = resort.ticketPrice < fairTicketPrice * 0.7
-    ? 'Tickets this cheap pull in big crowds: expect long lines and packed runs, and less money per skier. '
-    : resort.ticketPrice > fairTicketPrice * 1.3 ? 'Tickets this dear keep skiers away, and the ones who come expect a lot. ' : '';
-  return {
-    title: resort.name,
-    rows: [
-      ['Rating', stars(company.stars)],
-      ['Reputation', percent(resort.reputation)],
-      ['Ticket price', `${money(resort.ticketPrice)} (fair ${money(CONFIG.economy.fairTicketPrice)})`],
-      ['Income today', money(income(company.today))],
-      ['Skiers today', `${resort.today.arrivals} (${resort.today.regulars} regulars)`],
-      ['Today', weatherText(world.weather.today)],
-      ['Tomorrow', weatherText(world.weather.tomorrow)],
-      ['Next review', `End of day ${nextReview}`],
-      ['Next land', land ? `${land.name}, ${landLocked ? `needs ${land.stars}★` : 'on sale'}` : 'All yours'],
-      ...active.map((r) => [`📋 ${requestTitle(r)}`, `${money(r.reward)} · by day ${r.deadline}`] as const),
-      ...said.map((k) => [`${FEELING_EMOJI[k]} ${tallyText(k, tally[k]!.count)}`, `${tally[k]!.delta >= 0 ? '+' : '−'}${Math.abs(Math.round(tally[k]!.delta))}`] as const),
-    ],
-    note: `${priceNote}${CONFIG.review.magazine} reviews you every ${everyDays} days. Stars unlock lifts, upgrades, huts and land.`,
-    actions: [
-      { label: '− $5', action: 'priceDown' },
-      { label: '+ $5', action: 'priceUp' },
-      // Never disabled: a locked purchase still answers a click with why, through the toast.
-      ...(land ? [{ label: `Buy ${land.name} (${money(land.cost)})`, action: 'buyLand', primary: true } as const] : []),
-      CLOSE,
-    ],
-  };
+  switch (tab) {
+    case 'overview':
+      return {
+        ...base,
+        rows: [
+          ['Rating', stars(company.stars)],
+          ['Next review', `End of day ${nextReview}`],
+          ['Reputation', percent(resort.reputation)],
+          ['Income today', money(income(company.today))],
+          ['Skiers today', `${resort.today.arrivals} (${resort.today.regulars} regulars)`],
+          ['Today', weatherText(world.weather.today)],
+          ['Tomorrow', weatherText(world.weather.tomorrow)],
+        ],
+        note: `${CONFIG.review.magazine} reviews you every ${everyDays} days. Stars unlock lifts, upgrades, huts and land.`,
+        actions: [CLOSE],
+      };
+    case 'prices': {
+      const [min, max] = CONFIG.economy.ticketPriceRange;
+      const { fairTicketPrice } = CONFIG.economy;
+      const f = forecastDay(world, resort, resort.ticketPrice);
+      const busy = f.comfortable > 0 && f.skiers > f.comfortable;
+      const lines = f.comfortable === 0 ? '–' : busy ? `long (${Math.round((f.skiers / f.comfortable) * 100)}% of what your lifts carry)` : 'short';
+      const feel = resort.ticketPrice < fairTicketPrice * 0.8 ? 'a bargain' : resort.ticketPrice > fairTicketPrice * 1.2 ? 'pricey' : 'fair';
+      return {
+        ...base,
+        slider: { label: 'Ticket price', min, max, step: 1, value: resort.ticketPrice },
+        rows: [
+          ['Fair price', money(fairTicketPrice)],
+          ['Skiers think it’s', feel],
+          ['Expected skiers a day', f.skiers.toLocaleString('en-US')],
+          ['Lifts carry comfortably', f.comfortable.toLocaleString('en-US')],
+          ['Lines', lines],
+          ['Ticket money a day', money(f.tickets)],
+        ],
+        note: busy
+          ? 'More skiers than your lifts can carry means long lines and packed runs. Raise the price, or add and upgrade lifts.'
+          : 'Cheaper tickets bring more skiers but less per head. Dearer ones keep skiers away and make the ones who come pickier.',
+        actions: [CLOSE],
+      };
+    }
+    case 'goals': {
+      const tally = resort.today.feelings;
+      const said = [...topFeelings(tally, PRAISE, 3), ...topFeelings(tally, GRIPES, 3)];
+      const active = world.requests.filter((r) => r.status === 'active');
+      return {
+        ...base,
+        rows: [
+          ...active.map((r) => [requestTitle(r), `${money(r.reward)} · by day ${r.deadline}`] as const),
+          ...said.map((k) => [tallyText(k, tally[k]!.count), `${tally[k]!.delta >= 0 ? '+' : '−'}${Math.abs(Math.round(tally[k]!.delta))}`] as const),
+        ],
+        note: 'Requests pay a bonus if you meet them in time. Below them is what skiers are saying today, and how much it moved their mood.',
+        actions: [CLOSE],
+      };
+    }
+    case 'land': {
+      const land = CONFIG.land[resort.land];
+      if (!land) return { ...base, rows: [['Land', 'You own the whole mountain']], actions: [CLOSE] };
+      const locked = company.stars < land.stars;
+      const short = land.cost - company.money;
+      return {
+        ...base,
+        rows: [
+          ['Next land', land.name],
+          ['Price', money(land.cost)],
+          ['Needs', `${land.stars}★ (you have ${company.stars}★)`],
+          ['Next review', `End of day ${nextReview}`],
+        ],
+        note: locked
+          ? `${land.name} goes on sale once you’re rated ${land.stars}★.`
+          : short > 0 ? `You need ${money(short)} more.` : 'On sale now. You can build on it as soon as it’s yours.',
+        // Never disabled: a locked purchase still answers a click with why, through the toast.
+        actions: [{ label: locked ? `Needs ${land.stars}★ · review day ${nextReview}` : `Buy ${land.name} (${money(land.cost)})`, action: 'buyLand', primary: !locked && short <= 0 }, CLOSE],
+      };
+    }
+  }
 }
 
 /** Renders panel models, rebuilding the DOM only when its structure changes so buttons stay tappable. */
-export function createPanel(el: HTMLElement, onAction: (action: UiAction) => void): (model: PanelModel | null) => void {
+export function createPanel(el: HTMLElement, onAction: (action: UiAction) => void, onSlide: (value: number) => void): (model: PanelModel | null) => void {
   let structure = '';
+  let tabs: HTMLButtonElement[] = [];
+  let range: HTMLInputElement | null = null;
+  let typed: HTMLInputElement | null = null;
   let labels: HTMLElement[] = [];
   let values: HTMLElement[] = [];
   let buttons: HTMLButtonElement[] = [];
@@ -310,13 +371,39 @@ export function createPanel(el: HTMLElement, onAction: (action: UiAction) => voi
   return (model) => {
     el.hidden = model === null;
     if (!model) return void (structure = '');
-    const key = JSON.stringify([model.title, model.accent, model.rows.length, model.actions.map((a) => [a.action, a.primary]), model.note === undefined]);
+    const key = JSON.stringify([
+      model.title, model.accent, model.tabs?.map((t) => t.action), model.slider?.label, model.rows.length,
+      model.actions.map((a) => [a.action, a.primary]), model.note === undefined,
+    ]);
     if (key !== structure) {
       structure = key;
       el.replaceChildren();
       const title = el.appendChild(document.createElement('h2'));
       title.textContent = model.title;
       if (model.accent) title.style.borderColor = model.accent;
+      const tabBar = el.appendChild(document.createElement('div'));
+      tabBar.className = 'tabs';
+      tabBar.hidden = !model.tabs;
+      tabs = (model.tabs ?? []).map((t) => {
+        const b = tabBar.appendChild(document.createElement('button'));
+        b.dataset['action'] = t.action;
+        b.textContent = t.label;
+        return b;
+      });
+      range = typed = null;
+      if (model.slider) {
+        const { label, min, max, step } = model.slider;
+        const row = el.appendChild(document.createElement('label'));
+        row.className = 'slider';
+        row.appendChild(document.createElement('span')).textContent = label;
+        range = row.appendChild(document.createElement('input'));
+        typed = row.appendChild(document.createElement('input'));
+        Object.assign(range, { type: 'range', min, max, step });
+        Object.assign(typed, { type: 'number', min, max, step, inputMode: 'numeric' });
+        typed.setAttribute('aria-label', label);
+        range.addEventListener('input', () => onSlide(Number(range!.value)));
+        typed.addEventListener('change', () => onSlide(Number(typed!.value)));
+      }
       const table = el.appendChild(document.createElement('dl'));
       labels = [];
       values = model.rows.map(() => {
@@ -332,6 +419,13 @@ export function createPanel(el: HTMLElement, onAction: (action: UiAction) => voi
         b.classList.toggle('primary', a.primary ?? false);
         return b;
       });
+    }
+    model.tabs?.forEach((t, i) => tabs[i]!.classList.toggle('active', t.active));
+    // Leave the inputs alone while they're being used, so a running game never fights the player's hand.
+    if (model.slider && range && typed) {
+      const value = String(model.slider.value);
+      if (document.activeElement !== range && range.value !== value) range.value = value;
+      if (document.activeElement !== typed && typed.value !== value) typed.value = value;
     }
     model.rows.forEach(([label, value], i) => {
       set(labels[i]!, label);
