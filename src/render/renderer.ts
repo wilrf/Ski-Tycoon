@@ -1,3 +1,4 @@
+import { drawnSkiers } from './crowd';
 import { CONFIG, type Level, type LiftType } from '../config';
 import { dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
 import type { Lift } from '../sim/lifts';
@@ -20,6 +21,8 @@ export interface Frame {
   /** Skier positions before the latest tick, and how far (0 to 1) the frame is toward the next tick. */
   readonly previous: ReadonlyMap<number, Vec2>;
   readonly alpha: number;
+  /** Index into CONFIG.loop.speeds; fast speeds draw only a sample of skiers. */
+  readonly speedIndex: number;
 }
 
 const TOWER_SPACING = 70;
@@ -279,7 +282,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     }
   }
 
-  for (const s of resort.skiers) {
+  for (const s of drawnSkiers(world, f.speedIndex, ui.selection)) {
     const prev = f.previous.get(s.id);
     const pos = prev ? lerp(prev, s.pos, f.alpha) : s.pos;
     const p = at(pos);
