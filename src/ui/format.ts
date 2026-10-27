@@ -1,4 +1,4 @@
-import { CONFIG, type Level } from '../config';
+import { CONFIG, type Level, type Skill } from '../config';
 import type { Request } from '../sim/requests';
 import type { FeelingKind, Quote, Skier, Thought } from '../sim/skiers';
 import type { Resort } from '../sim/world';
@@ -16,7 +16,7 @@ export function clock(secondsSinceMidnight: number): string {
 }
 
 export const DIFFICULTY_NAMES: Record<Level, string> = { 0: 'Green', 1: 'Blue', 2: 'Black', 3: 'Double black' };
-export const SKILL_NAMES: Record<Level, string> = { 0: 'Beginner', 1: 'Intermediate', 2: 'Advanced', 3: 'Expert' };
+export const SKILL_NAMES: Record<Skill, string> = { 0: 'Beginner', 1: 'Intermediate', 2: 'Expert', 3: 'Pro', 4: 'Olympic' };
 
 export function thoughtText(t: Thought): string {
   switch (t.kind) {

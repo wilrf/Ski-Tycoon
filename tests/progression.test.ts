@@ -289,3 +289,19 @@ describe('tapping the map', () => {
     expect(ui.selection?.kind).not.toBe('skier');
   });
 });
+
+describe('five skill levels', () => {
+  it('treats pros and olympians as at home on double blacks', () => {
+    const double = runOf(3), black = runOf(2);
+    expect(funFor(double, 4, 0)).toBeCloseTo(funFor(double, 3, 0), 5);
+    expect(funFor(double, 4, 0)).toBeGreaterThan(funFor(black, 4, 0));
+  });
+
+  it('lets guests practise up to pro, but never to olympic', () => {
+    const guest = newGuest(1, rng(), [1, 1, 1, 1, 1]);
+    guest.skill = 3;
+    const skier = { ...makeSkier(vec(0, 0), 3), happiness: 90, practice: 50 };
+    for (let i = 0; i < 10; i++) recordVisit(guest, skier, true);
+    expect(guest.skill).toBe(3);
+  });
+});

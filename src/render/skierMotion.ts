@@ -16,8 +16,8 @@ export interface SkierPose {
 }
 
 /** Turn shape by skill: beginners make long, wide turns; experts make short, quick ones. Metres. */
-const TURN_LENGTH = [34, 26, 19, 14] as const;
-const TURN_WIDTH = [6.5, 6, 5, 4] as const;
+const TURN_LENGTH = [34, 26, 19, 14, 12] as const;
+const TURN_WIDTH = [6.5, 6, 5, 4, 3.5] as const;
 /** Distance skiers straighten out over before a jump so they hit it square. Metres. */
 const RUN_IN = 12;
 const JUMPS: Partial<Record<FeatureType, { readonly length: number; readonly peak: number }>> = {
