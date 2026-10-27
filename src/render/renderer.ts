@@ -8,7 +8,8 @@ import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, JACKETS, LEVEL_COLORS, LIFT_COLORS, SELECTED } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
-import { pine, type TerrainArt } from './terrainArt';
+import { scaleBucket, sprite } from './sprites';
+import { stampPine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
   readonly world: World;
@@ -105,7 +106,7 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
     for (const s of cables) {
       for (let d = s < 0 ? shift : spacing - shift; d < length; d += spacing) {
         const c = at(offset(lift.bottom, s, d));
-        ctx.fillRect(c.x - box / 2, c.y - box / 2, box, box);
+        if (c.x > -box && c.y > -box && c.x < view.width + box && c.y < view.height + box) ctx.fillRect(c.x - box / 2, c.y - box / 2, box, box);
       }
     }
   }
@@ -116,7 +117,7 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
 const isSelected = (ui: UiState, kind: 'lift' | 'run' | 'skier', id: number): boolean => ui.selection?.kind === kind && ui.selection.id === id;
 
 /**
- * The parts of the map that only change when the camera moves or something is built: sky, terrain, trees,
+ * The parts of the map that only change when the camera moves or something is built: terrain, trees,
  * runs and lift structures. They are painted once into an offscreen canvas and pasted every frame, which
  * is far cheaper than redrawing thousands of trees and snow marks.
  */
@@ -125,11 +126,6 @@ function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   const resort = activeResort(world);
   const { at, drawRun, liftStructure } = painter(ctx, camera, view);
 
-  const sky = ctx.createLinearGradient(0, 0, 0, view.height);
-  sky.addColorStop(0, '#2b4c7e');
-  sky.addColorStop(1, '#8fb3d9');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, view.width, view.height);
   const origin = at(vec(0, 0));
   const size = terrainExtent(resort.terrain) * camera.zoom;
   // A soft drop shadow from stacked translucent rings: shadowBlur on an image this big halves the frame rate.
@@ -140,11 +136,10 @@ function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.drawImage(vectorTrees ? f.terrain.ground : f.terrain.withTrees, origin.x, origin.y, size, size);
   if (vectorTrees) {
     const min = toWorld(camera, view, vec(-20, -20)), max = toWorld(camera, view, vec(view.width + 20, view.height + 20));
-    ctx.save();
-    ctx.translate(origin.x, origin.y);
-    ctx.scale(camera.zoom, camera.zoom);
-    for (const tree of f.terrain.trees) if (tree.x > min.x && tree.x < max.x && tree.y > min.y && tree.y < max.y) pine(ctx, tree);
-    ctx.restore();
+    const dpr = ctx.getTransform().a;
+    for (const tree of f.terrain.trees) {
+      if (tree.x > min.x && tree.x < max.x && tree.y > min.y && tree.y < max.y) stampPine(ctx, tree, at(tree), camera.zoom, dpr);
+    }
   }
 
   ctx.lineCap = ctx.lineJoin = 'round';
@@ -152,19 +147,78 @@ function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   for (const lift of resort.lifts) liftStructure(lift, isSelected(ui, 'lift', lift.id));
 }
 
-/** Everything that changes what drawStill paints. Cheap to build, so it is checked every frame. */
+/** Everything except the camera's position that changes what drawStill paints. Cheap, so it is checked every frame. */
 function stillKey(f: Frame, canvas: { width: number; height: number }): string {
   const { world, ui, camera, view } = f;
   const resort = activeResort(world);
   return [
-    camera.x, camera.y, camera.zoom, view.width, view.height, canvas.width, canvas.height,
+    camera.zoom, view.width, view.height, canvas.width, canvas.height,
     ui.selection ? `${ui.selection.kind}${'id' in ui.selection ? ui.selection.id : ''}` : '',
     resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}`).join(','),
     resort.lifts.map((l) => `${l.id}:${l.type}`).join(','),
   ].join('|');
 }
 
-let still: { canvas: HTMLCanvasElement; key: string; terrain: TerrainArt } | null = null;
+/**
+ * The still layer at device pixels, and the camera centre it was painted for. `spare` is a second buffer
+ * for scrolling, so panning shifts the old picture and paints only the strip that slid into view.
+ */
+interface Still {
+  canvas: HTMLCanvasElement;
+  spare: HTMLCanvasElement;
+  key: string;
+  terrain: TerrainArt;
+  x: number;
+  y: number;
+}
+let still: Still | null = null;
+
+function updateStill(ctx: CanvasRenderingContext2D, f: Frame): Still {
+  const { camera } = f;
+  const dpr = ctx.getTransform().a;
+  const key = stillKey(f, ctx.canvas);
+  const paint = (target: HTMLCanvasElement, at: Camera, clip?: (c: CanvasRenderingContext2D) => void): void => {
+    const sctx = target.getContext('2d')!;
+    sctx.save();
+    sctx.setTransform(ctx.getTransform());
+    clip?.(sctx);
+    drawStill(sctx, { ...f, camera: at });
+    sctx.restore();
+  };
+
+  if (!still || still.key !== key || still.terrain !== f.terrain) {
+    const canvas = still?.canvas ?? document.createElement('canvas'), spare = still?.spare ?? document.createElement('canvas');
+    for (const c of [canvas, spare]) {
+      c.width = ctx.canvas.width;
+      c.height = ctx.canvas.height;
+    }
+    paint(canvas, camera);
+    return (still = { canvas, spare, key, terrain: f.terrain, x: camera.x, y: camera.y });
+  }
+
+  // Shift by whole device pixels so the copied picture never blurs; the leftover fraction is applied when pasting.
+  const scale = camera.zoom * dpr;
+  const sx = Math.round((still.x - camera.x) * scale), sy = Math.round((still.y - camera.y) * scale);
+  if (sx === 0 && sy === 0) return still;
+  const { canvas, spare } = still;
+  const at = { x: still.x - sx / scale, y: still.y - sy / scale, zoom: camera.zoom };
+  if (Math.abs(sx) >= canvas.width || Math.abs(sy) >= canvas.height) {
+    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
+    paint(canvas, at);
+    return Object.assign(still, at);
+  }
+  const sctx = spare.getContext('2d')!;
+  sctx.clearRect(0, 0, spare.width, spare.height);
+  sctx.drawImage(canvas, sx, sy);
+  paint(spare, at, (c) => {
+    // Everything except where the old picture landed.
+    c.beginPath();
+    c.rect(0, 0, f.view.width, f.view.height);
+    c.rect(sx / dpr, sy / dpr, f.view.width, f.view.height);
+    c.clip('evenodd');
+  });
+  return Object.assign(still, { canvas: spare, spare: canvas }, at);
+}
 
 export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { world, ui, camera, view } = f;
@@ -172,20 +226,17 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { at, px, stroke, drawRun, liftStructure, liftCarriers } = painter(ctx, camera, view);
   const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
 
-  // The still layer is kept at device pixels, so paste it with the canvas's scale undone.
-  const key = stillKey(f, ctx.canvas);
-  if (!still || still.key !== key || still.terrain !== f.terrain) {
-    const canvas = still?.canvas ?? document.createElement('canvas');
-    canvas.width = ctx.canvas.width;
-    canvas.height = ctx.canvas.height;
-    const sctx = canvas.getContext('2d')!;
-    sctx.setTransform(ctx.getTransform());
-    drawStill(sctx, f);
-    still = { canvas, key, terrain: f.terrain };
-  }
+  const sky = ctx.createLinearGradient(0, 0, 0, view.height);
+  sky.addColorStop(0, '#2b4c7e');
+  sky.addColorStop(1, '#8fb3d9');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, view.width, view.height);
+  const layer = updateStill(ctx, f);
+  // The layer is at device pixels, so paste it with the canvas's scale undone.
+  const dpr = ctx.getTransform().a;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(still.canvas, 0, 0);
+  ctx.drawImage(layer.canvas, (layer.x - camera.x) * camera.zoom * dpr, (layer.y - camera.y) * camera.zoom * dpr);
   ctx.restore();
 
   ctx.lineCap = ctx.lineJoin = 'round';
@@ -236,7 +287,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (prev && dist(prev, s.pos) > 0.05) headings.set(s.id, Math.atan2(s.pos.y - prev.y, s.pos.x - prev.x));
     const riding = s.state.kind === 'riding';
     // Figures are drawn at 1.6× life size so they read as people at every zoom.
-    drawSkier(ctx, p, headings.get(s.id) ?? Math.PI / 2, px(1.6, 1.8), JACKETS[s.id % JACKETS.length]!, riding, isSelected(ui, 'skier', s.id));
+    stampSkier(ctx, p, headings.get(s.id) ?? Math.PI / 2, px(1.6, 1.8), JACKETS[s.id % JACKETS.length]!, riding, isSelected(ui, 'skier', s.id));
   }
   // Forget headings of skiers who have gone home.
   if (headings.size > resort.skiers.length * 2 + 100) {
@@ -256,6 +307,21 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const headings = new Map<number, number>();
+
+/** Headings are snapped to this many directions for skier sprites; finer turns aren't visible at this size. */
+const HEADINGS = 32;
+
+/** Stamps a skier from a cached sprite; the selected skier is drawn live so its highlight can sit underneath. */
+function stampSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: number, u: number, jacket: string, riding: boolean, selected: boolean): void {
+  if (selected) return drawSkier(ctx, p, heading, u, jacket, riding, true);
+  const dpr = ctx.getTransform().a, scale = scaleBucket(u * dpr);
+  const turn = (((Math.round((heading / (Math.PI * 2)) * HEADINGS) % HEADINGS) + HEADINGS) % HEADINGS);
+  // The figure reaches about 2.2u from its centre (ski tips, shadow); 5u square leaves room.
+  const image = sprite(`skier${jacket}${riding ? 'r' : ''}${turn}:${scale}`, 5 * scale, (s) => {
+    drawSkier(s, vec(2.5 * scale, 2.5 * scale), (turn / HEADINGS) * Math.PI * 2, scale, jacket, riding, false);
+  });
+  ctx.drawImage(image, p.x - 2.5 * u, p.y - 2.5 * u, 5 * u, 5 * u);
+}
 
 /**
  * A skier seen from above, `u` pixels per metre and facing `heading`: skis and poles, a jacket and a helmet,
