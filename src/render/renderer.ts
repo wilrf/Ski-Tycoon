@@ -4,6 +4,7 @@ import { CONFIG, type Level } from '../config';
 import { clamp, dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
 import { liftSpeed, rideSeconds, type Lift } from '../sim/lifts';
 import { profileRun } from '../sim/runs';
+import type { Skier } from '../sim/skiers';
 import { terrainExtent } from '../sim/terrain';
 import { activeResort, type World } from '../sim/world';
 import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
@@ -11,8 +12,8 @@ import { toScreen, toWorld, type Camera, type View } from './camera';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
-import { airborne, drawPuffs, stampSkier } from './skierArt';
-import { skiingPose, snowPuffs } from './skierMotion';
+import { airborne, drawPuffs, drawTrail, stampSkier } from './skierArt';
+import { skiingPose, snowPuffs, trailPoses } from './skierMotion';
 import { stampPine, type TerrainArt } from './terrainArt';
 
 export interface Frame {
@@ -35,6 +36,8 @@ const UI_FONT = '"Nunito", system-ui, sans-serif';
 const VECTOR_TREE_ZOOM = 1.2;
 /** Snow spray is too small to see below this zoom, so it isn't worked out at all. */
 const SPRAY_ZOOM = 1.2;
+/** Trails are drawn for at most this many skiers, those nearest the middle of the screen. */
+const MAX_TRAILS = 60;
 
 /** Helpers bound to one canvas and camera, shared by the still and live layers. */
 function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
@@ -326,6 +329,8 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     lift.queue.forEach((id, i) => inLine.set(id, slots[i]!));
   }
 
+  if (camera.zoom >= SPRAY_ZOOM) drawTrails(ctx, shown, f, at);
+
   for (const s of shown) {
     if (s.state.kind === 'riding') continue;
     const queued = inLine.get(s.id);
@@ -361,6 +366,21 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const headings = new Map<number, number>();
+
+/** The fresh lines behind skiers nearest the middle of the screen, under every figure. */
+function drawTrails(ctx: CanvasRenderingContext2D, shown: readonly Skier[], f: Frame, at: (p: Vec2) => Vec2): void {
+  const runs = activeResort(f.world).runs, centre = vec(f.view.width / 2, f.view.height / 2);
+  const skiing = shown
+    .filter((s) => s.state.kind === 'skiing')
+    .map((s) => ({ s, gap: dist(at(s.pos), centre) }))
+    .filter(({ gap }) => gap < Math.max(f.view.width, f.view.height))
+    .sort((a, b) => a.gap - b.gap)
+    .slice(0, MAX_TRAILS);
+  for (const { s } of skiing) {
+    const scared = s.state.kind === 'skiing' && s.state.scared;
+    drawTrail(ctx, trailPoses(s, runs, f.alpha), at, f.camera.zoom, s.skill >= 2 && !scared);
+  }
+}
 
 /** The standard ski-area symbols: green circle, blue square, black diamond, double black diamond. */
 export function difficultySymbol(ctx: CanvasRenderingContext2D, c: Vec2, level: Level, r: number): void {

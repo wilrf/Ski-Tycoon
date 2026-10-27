@@ -85,6 +85,22 @@ export function snowPuffs(s: Skier, runs: readonly Run[], alpha: number): Puff[]
   return puffs;
 }
 
+/** Spacing and reach of the fresh line drawn behind a skier, in metres. */
+const TRAIL_STEP = 1.5;
+const TRAIL_LENGTH = 25;
+
+/**
+ * Where a skier has just been, newest first, like the wet streak behind a raindrop: their own carved
+ * line, worked out again from the turn maths rather than stored.
+ */
+export function trailPoses(s: Skier, runs: readonly Run[], alpha: number): SkierPose[] {
+  const on = onRun(s, runs, alpha);
+  if (!on) return [];
+  const poses: SkierPose[] = [];
+  for (let back = 0; back <= TRAIL_LENGTH && on.d - back >= 0; back += TRAIL_STEP) poses.push(poseAt(s, on.run, on.d - back, on.scared));
+  return poses;
+}
+
 /** Adds `count` puffs fanned `spread` radians either side of `angle`, `age` 0 (fresh) to 1 (gone). */
 function spray(out: Puff[], from: Vec2, angle: number, spread: number, count: number, size: number, age: number, seed: number): void {
   const burst = 1 - (1 - age) * (1 - age);
