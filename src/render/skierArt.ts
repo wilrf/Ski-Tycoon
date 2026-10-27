@@ -100,3 +100,21 @@ export function drawSkier(ctx: CanvasRenderingContext2D, p: Vec2, heading: numbe
   }
   ctx.restore();
 }
+
+/**
+ * Snow kicked up by skiers. White on white snow would vanish, so each puff sits on a faint blue-grey
+ * shadow offset to the south-east, matching the light on everything else.
+ */
+export function drawPuffs(ctx: CanvasRenderingContext2D, puffs: readonly { readonly pos: Vec2; readonly radius: number; readonly alpha: number }[], at: (p: Vec2) => Vec2, zoom: number): void {
+  for (const pass of [0, 1]) {
+    for (const puff of puffs) {
+      const p = at(puff.pos), r = Math.max(0.8, puff.radius * zoom);
+      ctx.globalAlpha = puff.alpha * (pass === 0 ? 0.7 : 1);
+      ctx.fillStyle = pass === 0 ? '#7d8fb8' : '#ffffff';
+      ctx.beginPath();
+      ctx.arc(p.x + (pass === 0 ? r * 0.4 : 0), p.y + (pass === 0 ? r * 0.4 : 0), r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
