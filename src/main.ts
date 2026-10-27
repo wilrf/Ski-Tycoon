@@ -4,7 +4,7 @@ import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
 import { clampCamera, fitCamera, pan, toWorld, zoomAt } from './render/camera';
 import { draw } from './render/renderer';
-import { bakeTerrain } from './render/terrainImage';
+import { bakeTerrain } from './render/terrainArt';
 import { loadGame, saveGame } from './save/save';
 import type { Vec2 } from './sim/geometry';
 import { terrainExtent } from './sim/terrain';
@@ -12,10 +12,12 @@ import { activeResort, createWorld, tick, type World, type WorldEvent } from './
 import { money } from './ui/format';
 import { createHud, type MenuCommand } from './ui/hud';
 import { createPanel, describePanel } from './ui/panel';
+import { mountIcons } from './ui/icons';
 import { createToast } from './ui/toast';
 import { createToolbar, toolFor } from './ui/toolbar';
 import { createUiState, runAction, selectTool, tapMap, type UiAction } from './ui/tools';
 
+mountIcons();
 const canvas = document.getElementById('map') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const toast = createToast(document.getElementById('toast')!);
@@ -38,8 +40,11 @@ function loadSaved(): World | null {
   return result?.ok ? result.world : null;
 }
 
-let world = loadSaved() ?? createWorld(Date.now() % 1e9);
-let terrainImage = bakeTerrain(activeResort(world).terrain);
+// ?seed=123 starts a fresh game on that mountain, so a mountain can be shared by link.
+const seedParam = new URLSearchParams(location.search).get('seed');
+const randomSeed = (): number => Date.now() % 1e9;
+let world = seedParam ? createWorld(Number(seedParam) || 0) : (loadSaved() ?? createWorld(randomSeed()));
+let terrain = bakeTerrain(activeResort(world));
 const extent = (): number => terrainExtent(activeResort(world).terrain);
 const camera = fitCamera(extent(), view);
 let speedIndex = 1;
@@ -47,7 +52,7 @@ let previous = new Map<number, Vec2>();
 
 function startWorld(next: World): void {
   world = next;
-  terrainImage = bakeTerrain(activeResort(world).terrain);
+  terrain = bakeTerrain(activeResort(world));
   selectTool(ui, { kind: 'select' });
   Object.assign(camera, fitCamera(extent(), view));
   previous = new Map();
@@ -82,7 +87,7 @@ function menu(command: MenuCommand): void {
     if (loaded) startWorld(loaded);
     return toast(loaded ? 'Save loaded.' : 'No saved game yet.');
   }
-  if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) startWorld(createWorld(Date.now() % 1e9));
+  if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) startWorld(createWorld(randomSeed()));
 }
 
 function resize(): void {
@@ -151,7 +156,7 @@ function frame(now: number): void {
       pendingTicks--;
     }
   }
-  draw(ctx, { world, ui, camera, view, terrainImage, previous, alpha: pendingTicks });
+  draw(ctx, { world, ui, camera, view, terrain, previous, alpha: pendingTicks });
   refreshHud(world, speedIndex);
   renderPanel(describePanel(world, ui));
   refreshToolbar(ui);
