@@ -1,4 +1,6 @@
 """Reads square metric elevation grids from the Copernicus GLO-30 DEM on AWS Open Data."""
+from __future__ import annotations
+
 import math
 import os
 

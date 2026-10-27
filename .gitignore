@@ -6,3 +6,4 @@ __pycache__
 tools/terrain-stats/cache
 tools/terrain-stats/*.log
 tools/terrain-stats/results/*.png
+tools/terrain-stats/.venv

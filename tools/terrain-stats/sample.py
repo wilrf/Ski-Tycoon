@@ -1,4 +1,6 @@
 """Draws random 10 km tiles inside each zone and caches the accepted grids as .npy files."""
+from __future__ import annotations
+
 import json
 import random
 import sys
