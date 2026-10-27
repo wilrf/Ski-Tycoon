@@ -3,7 +3,7 @@ import { drawnSkiers } from './crowd';
 import { CONFIG, type Level } from '../config';
 import { clamp, dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '../sim/geometry';
 import { liftSpeed, rideSeconds, type Lift } from '../sim/lifts';
-import { profileRun } from '../sim/runs';
+import { profileRun, snowOf, type Run } from '../sim/runs';
 import type { Skier } from '../sim/skiers';
 import { terrainExtent } from '../sim/terrain';
 import { activeResort, type World } from '../sim/world';
@@ -140,7 +140,7 @@ function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   }
 
   ctx.lineCap = ctx.lineJoin = 'round';
-  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null, runWear(run.id));
+  for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null, runWear(run));
   for (const lift of resort.lifts) liftStructure(lift, isSelected(ui, 'lift', lift.id));
 }
 
@@ -166,8 +166,15 @@ function noteSkiers(world: World): void {
   }
 }
 
-/** Snapped to sixths so the cached map is repainted only a few times as a run wears in. */
-const runWear = (runId: number): number => Math.round(((skiedBy.get(runId)?.size ?? 0) / FULL_WEAR) * 6) / 6;
+/**
+ * Snapped to sixths so the cached map is repainted only a few times as a run wears in. A run the cats skipped
+ * last night starts the morning as worn as the sim's snow says, so ungroomed runs show their bumps all day.
+ */
+const runWear = (run: Run): number => {
+  const today = (skiedBy.get(run.id)?.size ?? 0) / FULL_WEAR;
+  const unGroomed = (1 - snowOf(run)) / (1 - CONFIG.grooming.roughest);
+  return Math.round(Math.min(1, Math.max(today, unGroomed)) * 6) / 6;
+};
 
 /** Everything except the camera's position that changes what drawStill paints. Cheap, so it is checked every frame. */
 function stillKey(f: Frame, canvas: { width: number; height: number }): string {
@@ -176,7 +183,7 @@ function stillKey(f: Frame, canvas: { width: number; height: number }): string {
   return [
     camera.zoom, view.width, view.height, canvas.width, canvas.height,
     ui.selection ? `${ui.selection.kind}${'id' in ui.selection ? ui.selection.id : ''}` : '',
-    resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}:${runWear(r.id)}`).join(','),
+    resort.runs.map((r) => `${r.id}:${r.points.length}:${r.profile.difficulty}:${runWear(r)}`).join(','),
     resort.lifts.map((l) => `${l.id}:${l.type}`).join(','),
   ].join('|');
 }

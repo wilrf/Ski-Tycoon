@@ -1,10 +1,10 @@
 import { CONFIG, type ApresTier, type Skill } from '../config';
-import { buildingsNear, seatsOf, type Building } from './buildings';
+import { buildingsNear, mealJoyOf, mealPriceOf, seatsOf, type Building } from './buildings';
 import { clamp, dist, lerp, pointAlong, type Vec2 } from './geometry';
 import { lineMood, liftTier, rideJoy, rideSeconds, waitSeconds, type Lift } from './lifts';
 import { branchesOf, leadsSomewhere, liftsFrom, mergeOf, runsFromLift, type Mountain } from './network';
 import { nextFloat, nextRange, pickWeighted, type Rng } from './rng';
-import { favouriteFeature, featureFun, funFor, rateRun, runLevel, type Run } from './runs';
+import { favouriteFeature, featureFun, funFor, rateRun, runLevel, wearRun, type Run } from './runs';
 
 export type SkillLevel = Skill;
 
@@ -327,6 +327,7 @@ function finishRun(ctx: SkierContext, s: Skier, run: Run, scared: boolean): void
   const fun = funFor(run, s.skill, onRun, ctx.weatherFun);
   s.energy = Math.max(0, s.energy - run.profile.vertical * CONFIG.skiers.energyPerVerticalMetre);
   s.avoid = [];
+  wearRun(run);
   if (scared) {
     s.stretches++;
     s.thought = { kind: 'survivedRun', run: run.name };
@@ -399,12 +400,12 @@ export function updateSkier(ctx: SkierContext, s: Skier, dt: number): boolean {
     else if (state.kind === 'toBuilding') {
       if (moveToward(s, building.pos, cfg.walkSpeed * 2 * dt)) s.state = { kind: 'eating', buildingId: building.id, left: CONFIG.meals.seconds };
     } else if ((state.left -= dt) <= 0) {
-      const price = Math.min(s.cash, CONFIG.buildings[building.type].mealPrice);
+      const price = Math.min(s.cash, mealPriceOf(building));
       s.cash -= price;
       ctx.spend(price, 'meal');
       s.ate = true;
       s.energy = Math.min(100, s.energy + CONFIG.meals.energy);
-      feel(ctx.journal, ctx.time, s, 'goodMeal', CONFIG.meals.joy, building.name);
+      feel(ctx.journal, ctx.time, s, 'goodMeal', mealJoyOf(building), building.name);
       const lift = building.type === 'hut' ? ctx.mountain.lifts.find((l) => dist(l.top, building.pos) <= CONFIG.meals.hutReach) : undefined;
       if (lift && !ctx.closed) pickRunFromTop(ctx, s, lift);
       else decide(ctx, s);

@@ -1,12 +1,12 @@
 import { CONFIG, type FeatureType, type LiftTier } from '../config';
-import { buildingInvested, nextLodgeUpgrade, seatsOf } from '../sim/buildings';
+import { buildingInvested, buildingPartsFor, mealPriceOf, nextBuildingPart, nextLodgeUpgrade, partLevelsFor, seatsOf } from '../sim/buildings';
 import { income } from '../sim/economy';
 import { liftCapacity, liftTier, nextPartLevel, partCost, partLevel, partsFor, type Lift, type LiftPart, nextTier, rideSeconds, upgradeCost, waitSeconds } from '../sim/lifts';
 import { branchesOf, isBase, leadsSomewhere, liftsFrom, mergeOf, runsFromLift } from '../sim/network';
 import { GRIPES, PRAISE, topFeelings } from '../sim/progress';
-import { featureUpkeep, funFor, profileRun, rateRun, runLevel } from '../sim/runs';
+import { featureUpkeep, funFor, groomingCost, groomingOf, nextWidening, profileRun, rateRun, roomOf, runLevel, snowOf, wideningCost } from '../sim/runs';
 import { weatherSpec } from '../sim/weather';
-import { activeResort, affordableLength, forecastDay, nextReviewDay, partProblem, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
+import { activeResort, affordableLength, buildingPartProblem, wideningProblem, forecastDay, nextReviewDay, partProblem, buildingProblemsHere, heldLifts, runEndAt, runProblemsHere, upgradeProblem, type World } from '../sim/world';
 import { LEVEL_COLORS } from '../render/colors';
 import { activityText, DIFFICULTY_NAMES, FEELING_EMOJI, feelingText, grade, metres, minutes, money, outOfTen, percent, requestTitle, SKILL_NAMES, stars, tallyText, thoughtText, weatherText } from './format';
 import { pendingLiftPlan, RESORT_TABS, runStartsConnected, type ResortTab, type UiAction, type UiState } from './tools';
@@ -242,7 +242,10 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const end = run.points[run.points.length - 1]!;
     const merge = mergeOf(resort, run);
     const endsAt = [...liftsFrom(resort, end).map((l) => l.name), ...(isBase(resort, end) ? ['the base'] : []), ...(merge ? [merge.run.name] : [])];
-    const fun = ([0, 1, 2, 3] as const).map((skill) => funFor(run, skill, onRun, weatherSpec(world.weather.today).fun).toFixed(1)).join(' · ');
+    const widen = nextWidening(run);
+    const plan = CONFIG.grooming.plans[groomingOf(run)];
+    const snow = snowOf(run);
+    const fun = SKILL_LEVELS.map((skill) => funFor(run, skill, onRun, weatherSpec(world.weather.today).fun).toFixed(1)).join(' · ');
     return {
       title: run.name,
       accent: LEVEL_COLORS[run.profile.difficulty],
@@ -258,10 +261,17 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
         ['Curves', run.profile.curviness >= CONFIG.runs.fullCurviness ? 'Plenty' : run.profile.curviness >= CONFIG.runs.fullCurviness / 3 ? 'Some' : 'Straight'],
         ['Features', run.features.map((f) => CONFIG.features[f.type].label).join(', ') || 'None'],
         ...(run.features.length > 0 ? [['Feature upkeep', `${money(featureUpkeep(run))} a day`] as const] : []),
+        ['Snow', snow >= 0.85 ? 'Fresh corduroy' : snow >= 0.5 ? 'Skied in' : 'Bumpy, moguls forming'],
+        ['Grooming', plan.nights > 0 ? `${plan.label}, ${money(groomingCost(run))} a night${run.profile.difficulty >= 2 ? ' (winch cat)' : ''}` : plan.label],
+        ['Width', run.widened ? `${CONFIG.widening[run.widened - 1]!.name}: ${Math.round((roomOf(run) - 1) * 100)}% more room` : 'Standard trail'],
       ],
-      note: leadsSomewhere(resort, run) ? 'Fun is out of 10 for beginners · intermediates · advanced · experts. Skiers like runs at their own level.' : 'This run ends nowhere, so skiers won’t use it.',
+      note: leadsSomewhere(resort, run)
+        ? 'Fun is out of 10 for beginners · intermediates · experts · pros · olympians. Beginners want fresh corduroy; pros enjoy the bumps of an ungroomed run.'
+        : 'This run ends nowhere, so skiers won’t use it.',
       actions: [
         { label: 'Add feature', action: 'addFeature', primary: true },
+        { label: `Grooming: ${plan.label.toLowerCase()}`, action: 'grooming' },
+        ...(widen ? [{ label: world.company.stars < widen.stars ? `${widen.name} needs ${widen.stars}★` : `${widen.name} (${money(wideningCost(run)!)})`, action: 'widen', primary: wideningProblem(world, run) === null } as const] : []),
         ...(run.features.length > 0 ? [{ label: 'Clear features', action: 'clearFeatures' } as const] : []),
         { label: 'Remove', action: 'remove' },
         CLOSE,
@@ -277,16 +287,26 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
     const isLodge = building.type === 'lodge';
     const next = nextLodgeUpgrade(building);
     const drinks = CONFIG.apres.prices[resort.apresPrice];
-    const built = CONFIG.lodgeUpgrades.slice(0, building.upgrades).map((u) => u.name);
+    const built = [
+      ...CONFIG.lodgeUpgrades.slice(0, building.upgrades).map((u) => u.name),
+      ...buildingPartsFor(building.type).flatMap((p) => partLevelsFor(building.type, p).slice(0, building.parts?.[p] ?? 0).map((l) => l.name)),
+    ];
+    const partButtons = buildingPartsFor(building.type).flatMap((part): PanelButton[] => {
+      const level = nextBuildingPart(building, part);
+      if (!level) return [];
+      const gain = level.seats ? `+${level.seats} seats` : `meals +${money(level.mealPrice ?? 0)}, happier diners`;
+      const label = world.company.stars < level.stars ? `${level.name} needs ${level.stars}★` : `${level.name} (${gain}, ${money(level.cost)})`;
+      return [{ label, action: `building:${part}`, primary: buildingPartProblem(world, building, part) === null }];
+    });
     return {
       title: building.name,
       rows: [
         ['Type', spec.label],
         ['Seats taken', `${inside} of ${seatsOf(building)}`],
-        ['Meal price', money(spec.mealPrice)],
+        ['Meal price', money(mealPriceOf(building))],
         ['Meals today (resort)', String(resort.today.meals)],
+        ['Built on', built.join(', ') || 'Nothing yet'],
         ...(isLodge ? [
-          ['Extensions', built.join(', ') || 'None yet'],
           ['Après drinks', `${drinks.label}, ${money(drinks.drinkPrice)} each`],
           ['Après today (resort)', `${resort.today.apresGuests} guests, ${money(world.company.today.apres)}`],
         ] as const : []),
@@ -294,6 +314,7 @@ export function describePanel(world: World, ui: UiState): PanelModel | null {
       note: isLodge ? 'From 2:30 PM until 8 PM the lodge bar serves après. Low prices bring more guests and loyalty; high prices earn more per drink but put some skiers off.' : undefined,
       actions: [
         ...(next ? [{ label: `Add ${next.name.toLowerCase()} (+${next.seats} seats, ${money(next.cost)})`, action: 'upgrade', primary: true, disabled: world.company.money < next.cost } as const] : []),
+        ...partButtons,
         ...(isLodge ? [{ label: `Drinks: ${drinks.label}`, action: 'apresPrice' } as const] : []),
         { label: `Remove (refund ${money(buildingInvested(building) * CONFIG.economy.removalRefund)})`, action: 'remove' },
         CLOSE,

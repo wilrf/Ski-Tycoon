@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { deserialize, serialize } from '../src/save/save';
 import { vec, type Vec2 } from '../src/sim/geometry';
-import { featureFun, featureProblem, funFor, profileRun, type Run } from '../src/sim/runs';
+import { featureFun, featureProblem, funFor, groomedTonight, groomingCost, profileRun, rateRun, snowFun, snowOf, wideningCost, type Run } from '../src/sim/runs';
+import { mealPriceOf, seatsOf } from '../src/sim/buildings';
+import { describePanel } from '../src/ui/panel';
+import { createUiState, runAction } from '../src/ui/tools';
 import { chooseRun } from '../src/sim/skiers';
 import { activeResort, applyCommand, createWorld, tick, type DayReport, type World } from '../src/sim/world';
 import { makeRun, plane, rng, runOf } from './helpers';
@@ -71,6 +74,112 @@ describe('features', () => {
   });
 });
 
+describe('grooming', () => {
+  it('wears runs through the day; the cats restore them overnight, for a price', () => {
+    const world = builtWorld();
+    const [run] = activeResort(world).runs;
+    const before = world.company.money;
+    const day = playDay(world);
+    expect(snowOf(run!)).toBe(1);
+    expect(day.ledger.upkeep).toBe(groomingCost(run!));
+    expect(world.company.money).toBeLessThan(before + day.ledger.tickets + day.ledger.food + day.ledger.apres + 1);
+
+    expect(applyCommand(world, { type: 'setGrooming', runId: run!.id, grooming: 'none' })).toEqual({ ok: true });
+    const rough = playDay(world);
+    if (world.weather.today !== 'powder') expect(snowOf(run!)).toBeLessThan(1);
+    expect(rough.ledger.upkeep).toBe(0);
+  });
+
+  it('every other night grooms on alternate nights', () => {
+    const run: Run = { ...makeRun(plane(0.3), [vec(500, 100), vec(500, 500)]), grooming: 'alternate' };
+    expect(groomedTonight(run, 1)).not.toBe(groomedTonight(run, 2));
+    expect(groomedTonight({ ...run, grooming: 'nightly' }, 1)).toBe(true);
+    expect(groomedTonight({ ...run, grooming: 'none' }, 2)).toBe(false);
+  });
+
+  it('beginners want corduroy; pros like the bumps', () => {
+    const run: Run = { ...makeRun(plane(0.3), [vec(500, 100), vec(500, 500)]), snow: CONFIG.grooming.roughest };
+    expect(snowFun(run, 0)).toBeLessThan(1);
+    expect(snowFun(run, 3)).toBeGreaterThan(1);
+    expect(snowFun({ ...run, snow: 1 }, 0)).toBe(1);
+  });
+
+  it('costs more on steep runs, which need a winch cat', () => {
+    const blue = makeRun(plane(0.3), [vec(500, 100), vec(500, 500)]);
+    const black = makeRun(plane(0.6), [vec(500, 100), vec(500, 500)]);
+    expect(black.profile.difficulty).toBeGreaterThanOrEqual(2);
+    expect(groomingCost(black) / groomingCost(blue)).toBeCloseTo(CONFIG.grooming.winchFactor * (black.profile.length / blue.profile.length), 1);
+  });
+});
+
+describe('run and building upgrades', () => {
+  it('widening a trail spreads its skiers out, and the wider levels wait for stars', () => {
+    const world = builtWorld();
+    const run = activeResort(world).runs[0]!;
+    const crowded = rateRun(run, 40).crowding;
+    const before = world.company.money;
+    const cost = wideningCost(run)!;
+    expect(applyCommand(world, { type: 'widenRun', runId: run.id })).toEqual({ ok: true });
+    expect(world.company.money).toBe(before - cost);
+    expect(rateRun(run, 40).crowding).toBeLessThan(crowded);
+    world.company.stars = 0;
+    expect(applyCommand(world, { type: 'widenRun', runId: run.id })).toMatchObject({ ok: false });
+    world.company.stars = 5;
+    expect(applyCommand(world, { type: 'widenRun', runId: run.id })).toEqual({ ok: true });
+    expect(applyCommand(world, { type: 'widenRun', runId: run.id })).toMatchObject({ ok: false });
+  });
+
+  it('kitchens raise meal prices and terraces add seats, and both survive a save', () => {
+    const world = builtWorld();
+    const resort = activeResort(world);
+    const lift = resort.lifts[0]!;
+    world.company.stars = 0;
+    world.company.money = 10_000_000;
+    resort.buildings.push({ id: 999, name: 'Test Hut', type: 'hut', pos: vec(lift.top.x + 20, lift.top.y), upgrades: 0 });
+    const hut = resort.buildings.find((b) => b.id === 999)!;
+    expect(applyCommand(world, { type: 'upgradeBuildingPart', id: hut.id, part: 'kitchen' })).toMatchObject({ ok: false });
+    world.company.stars = 5;
+    const price = mealPriceOf(hut), seats = seatsOf(hut);
+    expect(applyCommand(world, { type: 'upgradeBuildingPart', id: hut.id, part: 'kitchen' })).toEqual({ ok: true });
+    expect(applyCommand(world, { type: 'upgradeBuildingPart', id: hut.id, part: 'terrace' })).toEqual({ ok: true });
+    expect(mealPriceOf(hut)).toBe(price + CONFIG.buildingParts.hut.kitchen[0]!.mealPrice);
+    expect(seatsOf(hut)).toBe(seats + CONFIG.buildingParts.hut.terrace[0]!.seats);
+    expect(applyCommand(world, { type: 'upgradeBuildingPart', id: hut.id, part: 'terrace' })).toMatchObject({ ok: false });
+    const loaded = deserialize(serialize(world));
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(activeResort(loaded.world).buildings.find((b) => b.id === 999)!.parts).toEqual({ kitchen: 1, terrace: 1 });
+  });
+});
+
+describe('upgrade panels', () => {
+  it('show grooming and widening on a run, and cycle the grooming plan', () => {
+    const world = builtWorld();
+    const run = activeResort(world).runs[0]!;
+    const ui = createUiState();
+    ui.selection = { kind: 'run', id: run.id };
+    const panel = describePanel(world, ui)!;
+    expect(panel.rows.map(([label]) => label)).toEqual(expect.arrayContaining(['Snow', 'Grooming', 'Width']));
+    expect(panel.actions.map((a) => a.action)).toEqual(expect.arrayContaining(['grooming', 'widen']));
+    runAction(world, ui, 'grooming');
+    expect(run.grooming).toBe('alternate');
+    runAction(world, ui, 'grooming');
+    runAction(world, ui, 'grooming');
+    expect(run.grooming).toBe('nightly');
+  });
+
+  it('offer kitchen upgrades on a lodge', () => {
+    const world = builtWorld();
+    const resort = activeResort(world);
+    resort.buildings.push({ id: 998, name: 'Test Lodge', type: 'lodge', pos: vec(0, 0), upgrades: 0 });
+    const ui = createUiState();
+    ui.selection = { kind: 'building', id: 998 };
+    world.company.stars = 5;
+    expect(describePanel(world, ui)!.actions.map((a) => a.action)).toContain('building:kitchen');
+    runAction(world, ui, 'building:kitchen');
+    expect(resort.buildings.find((b) => b.id === 998)!.parts).toEqual({ kitchen: 1 });
+  });
+});
+
 /** A chairlift from the base and a run from its top back down, on a generated mountain. */
 function builtWorld(): World {
   const world = createWorld(42);
@@ -97,7 +206,9 @@ describe('building features', () => {
     expect(applyCommand(world, { type: 'addFeature', runId: run.id, featureType: 'berms', at: 100 })).toEqual({ ok: true });
     expect(world.company.money).toBe(before - CONFIG.features.berms.cost);
     expect(applyCommand(world, { type: 'addFeature', runId: run.id, featureType: 'rollers', at: 110 })).toMatchObject({ ok: false });
-    expect(playDay(world).ledger.upkeep).toBe(CONFIG.features.berms.upkeepPerDay);
+    // The run is also groomed every night by default; that cost is its own.
+    const grooming = activeResort(world).runs.reduce((sum, r) => sum + groomingCost(r), 0);
+    expect(playDay(world).ledger.upkeep).toBe(CONFIG.features.berms.upkeepPerDay + grooming);
   });
 
   it('refunds half when features or their run are removed', () => {

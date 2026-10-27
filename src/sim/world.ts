@@ -1,5 +1,5 @@
-import { CONFIG, type ApresPrice, type BuildingType, type FeatureType, type LiftType } from '../config';
-import { buildingInvested, buildingProblems, nextLodgeUpgrade, type Building } from './buildings';
+import { CONFIG, type ApresPrice, type BuildingPart, type BuildingType, type FeatureType, type Grooming, type LiftType } from '../config';
+import { buildingInvested, buildingProblems, nextBuildingPart, nextLodgeUpgrade, type Building } from './buildings';
 import { build, createCompany, earn, emptyLedger, payUpkeep, priceDemand, refund, sellTicket, type Company, type Ledger } from './economy';
 import { clamp, dist, pointAlong, vec, type Vec2 } from './geometry';
 import { newGuest, recordVisit, regularsComing, trimGuests, type Guest } from './guests';
@@ -8,7 +8,7 @@ import { isBase, liftsFrom, runAt, type Mountain } from './network';
 import { emptyWeek, landProblem, writeReview, type Review, type Week } from './progress';
 import { offerRequest, requestMet, type Request } from './requests';
 import { createRng, nextFloat, nextRange, type Rng } from './rng';
-import { featureInvestment, featureProblem, featureUpkeep, profileRun, runProblems, type Run } from './runs';
+import { featureInvestment, featureProblem, featureUpkeep, groomedTonight, groomingCost, nextWidening, profileRun, runProblems, wideningCost, type Run } from './runs';
 import { boardSkier, createSkier, feel, feelPrice, updateSkier, type FeelingTally, type Skier, type SkierContext } from './skiers';
 import { generateTerrain, heightAt, terrainExtent, type Terrain } from './terrain';
 import { advanceForecast, nextWeather, weatherSpec, type Forecast } from './weather';
@@ -86,6 +86,9 @@ export type Command =
   | { readonly type: 'buildBuilding'; readonly buildingType: BuildingType; readonly pos: Vec2 }
   | { readonly type: 'removeBuilding'; readonly id: number }
   | { readonly type: 'upgradeLodge'; readonly id: number }
+  | { readonly type: 'upgradeBuildingPart'; readonly id: number; readonly part: BuildingPart }
+  | { readonly type: 'setGrooming'; readonly runId: number; readonly grooming: Grooming }
+  | { readonly type: 'widenRun'; readonly runId: number }
   | { readonly type: 'setApresPrice'; readonly price: ApresPrice }
   | { readonly type: 'setTicketPrice'; readonly price: number }
   | { readonly type: 'buyLand' };
@@ -386,14 +389,18 @@ function endDay(world: World): DayReport {
   }
 
   world.requests = world.requests.filter((r) => r.status === 'active' || r.deadline > day - 3);
-  // Park crews and cats reshape the features overnight.
-  const upkeep = resort.runs.reduce((sum, r) => sum + featureUpkeep(r), 0);
+  // Park crews reshape the features overnight, and the cats groom the runs on tonight's plan.
+  const groomed = resort.runs.filter((r) => groomedTonight(r, day));
+  for (const r of groomed) r.snow = 1;
+  const upkeep = resort.runs.reduce((sum, r) => sum + featureUpkeep(r), 0) + groomed.reduce((sum, r) => sum + groomingCost(r), 0);
   if (upkeep > 0) payUpkeep(world.company, upkeep);
   const ledger = world.company.today;
   world.company.today = emptyLedger();
   world.calendar.day++;
   world.calendar.time = CONFIG.calendar.openHour * 3600;
   advanceForecast(world.weather, world.rng);
+  // A powder day buries yesterday's tracks and bumps on every run.
+  if (world.weather.today === 'powder') for (const r of resort.runs) r.snow = 1;
   const offered = fillRequests(world);
   resort.guests = trimGuests(resort.guests);
   resort.arrivalCredit = resort.regularCredit = 0;
@@ -482,6 +489,25 @@ export function upgradeProblem(world: World, lift: Lift): string | null {
 }
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
+
+/** Why the building can't add the next level of this part right now, or null if it can. */
+export function buildingPartProblem(world: World, building: Building, part: BuildingPart): string | null {
+  const next = nextBuildingPart(building, part);
+  if (!next) return 'That’s already fully built.';
+  if (world.company.stars < next.stars) return `${next.name} needs a ${next.stars}★ rating. The next review is on day ${nextReviewDay(world)}.`;
+  if (world.company.money < next.cost) return `${next.name} costs $${next.cost.toLocaleString('en-US')}.`;
+  return null;
+}
+
+/** Why the run can't be widened right now, or null if it can. */
+export function wideningProblem(world: World, run: Run): string | null {
+  const next = nextWidening(run);
+  if (!next) return 'This run is as wide as it gets.';
+  if (world.company.stars < next.stars) return `${next.name} needs a ${next.stars}★ rating. The next review is on day ${nextReviewDay(world)}.`;
+  const cost = wideningCost(run)!;
+  if (world.company.money < cost) return `${next.name} costs $${cost.toLocaleString('en-US')}.`;
+  return null;
+}
 
 export function applyCommand(world: World, cmd: Command): CommandResult {
   const resort = activeResort(world);
@@ -579,6 +605,30 @@ export function applyCommand(world: World, cmd: Command): CommandResult {
       if (!next) return fail(building.type === 'lodge' ? 'This lodge is fully built out.' : 'Only base lodges can be extended.');
       if (!build(company, next.cost)) return fail(`The ${next.name.toLowerCase()} costs $${next.cost.toLocaleString('en-US')}.`);
       building.upgrades++;
+      return { ok: true };
+    }
+    case 'upgradeBuildingPart': {
+      const building = resort.buildings.find((b) => b.id === cmd.id);
+      if (!building) return fail('That building is gone.');
+      const problem = buildingPartProblem(world, building, cmd.part);
+      if (problem) return fail(problem);
+      build(company, nextBuildingPart(building, cmd.part)!.cost);
+      building.parts = { ...building.parts, [cmd.part]: (building.parts?.[cmd.part] ?? 0) + 1 };
+      return { ok: true };
+    }
+    case 'setGrooming': {
+      const run = resort.runs.find((r) => r.id === cmd.runId);
+      if (!run) return fail('That run is gone.');
+      run.grooming = cmd.grooming;
+      return { ok: true };
+    }
+    case 'widenRun': {
+      const run = resort.runs.find((r) => r.id === cmd.runId);
+      if (!run) return fail('That run is gone.');
+      const problem = wideningProblem(world, run);
+      if (problem) return fail(problem);
+      build(company, wideningCost(run)!);
+      run.widened = (run.widened ?? 0) + 1;
       return { ok: true };
     }
     case 'setApresPrice': {
