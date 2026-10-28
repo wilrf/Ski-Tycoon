@@ -2,7 +2,7 @@ import './style.css';
 import { CONFIG } from './config';
 import { attachKeyboard } from './input/keyboard';
 import { attachPointer } from './input/pointer';
-import { clampCamera, fitCamera, follow, pan, toWorld, zoomAt } from './render/camera';
+import { clampCamera, fitCamera, follow, pan, setGround, toWorld, zoomAt } from './render/camera';
 import { drawOverlay } from './render/overlay';
 import { draw } from './render/renderer';
 import { skiingPose } from './render/skierMotion';
@@ -57,6 +57,7 @@ const randomSeed = (): number => Date.now() % 1e9;
 const fresh = seedParam !== null || makeSite !== null;
 const saved = fresh ? null : loadSaved();
 let world = fresh ? newWorld(seedParam ? Number(seedParam) || 0 : randomSeed()) : (saved ?? newWorld(randomSeed()));
+setGround(activeResort(world).terrain);
 let terrain = bakeTerrain(activeResort(world));
 const extent = (): number => terrainExtent(activeResort(world).terrain);
 const camera = fitCamera(extent(), view);
@@ -65,6 +66,7 @@ let previous = new Map<number, Vec2>();
 
 function startWorld(next: World): void {
   world = next;
+  setGround(activeResort(world).terrain);
   terrain = bakeTerrain(activeResort(world));
   selectTool(ui, { kind: 'select' });
   Object.assign(camera, fitCamera(extent(), view));
