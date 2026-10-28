@@ -227,21 +227,31 @@ export const CONFIG = {
     chairlift: { label: 'Chairlift', baseCost: 80_000, costPerMetre: 250, speed: 2.5, capacityPerHour: 1200, upkeepPerDay: 900, maxLength: 1600, maxGrade: 1.0 },
     gondola: { label: 'Gondola', baseCost: 300_000, costPerMetre: 600, speed: 5, capacityPerHour: 2400, upkeepPerDay: 2500, maxLength: 3000, maxGrade: 1.5 },
   } satisfies Record<LiftType, LiftSpec>,
-  /** Each lift starts at tier 0 and upgrades in place, keeping its line and its runs. */
+  /**
+   * Each lift starts at tier 0 and upgrades in place, keeping its line and its runs. Capacities follow real
+   * lifts: a double chair moves about 1,200 skiers an hour, a triple 1,800 and a fixed quad 2,400. Detachable
+   * chairs slow down in the station, so the rope can run twice as fast. A 3S gondola, like Whistler's Peak 2
+   * Peak, rides two track ropes at about 7.5 m/s. Saved lifts store their tier's index, so a new tier inserted
+   * mid-list needs a save migration.
+   */
   liftTiers: {
     ropeTow: [
       { name: 'Rope tow', speedFactor: 1, capacityFactor: 1, upgradeCostFactor: 0, stars: 0, effort: 1, covered: false },
-      { name: 'T-bar', speedFactor: 1.2, capacityFactor: 1.6, upgradeCostFactor: 0.8, stars: 1, effort: 0.4, covered: false },
+      { name: 'Platter lift', speedFactor: 1.1, capacityFactor: 1.3, upgradeCostFactor: 0.5, stars: 0, effort: 0.6, covered: false },
+      { name: 'T-bar', speedFactor: 1.2, capacityFactor: 1.6, upgradeCostFactor: 0.6, stars: 1, effort: 0.4, covered: false },
     ],
     chairlift: [
       { name: 'Double chair', speedFactor: 1, capacityFactor: 1, upgradeCostFactor: 0, stars: 0, effort: 0, covered: false },
-      { name: 'Quad chair', speedFactor: 1, capacityFactor: 1.6, upgradeCostFactor: 0.5, stars: 2, effort: 0, covered: false },
-      { name: 'High-speed quad', speedFactor: 2, capacityFactor: 1.6, upgradeCostFactor: 0.8, stars: 3, effort: 0, covered: false },
-      { name: 'Six-pack bubble', speedFactor: 2, capacityFactor: 2.4, upgradeCostFactor: 1, stars: 4, effort: 0, covered: true },
+      { name: 'Triple chair', speedFactor: 1, capacityFactor: 1.5, upgradeCostFactor: 0.4, stars: 1, effort: 0, covered: false },
+      { name: 'Quad chair', speedFactor: 1, capacityFactor: 2, upgradeCostFactor: 0.5, stars: 2, effort: 0, covered: false },
+      { name: 'High-speed quad', speedFactor: 2, capacityFactor: 2.2, upgradeCostFactor: 0.8, stars: 3, effort: 0, covered: false },
+      { name: 'Six-pack bubble', speedFactor: 2, capacityFactor: 2.8, upgradeCostFactor: 1, stars: 4, effort: 0, covered: true },
+      { name: 'Eight-seat bubble', speedFactor: 2.1, capacityFactor: 3.2, upgradeCostFactor: 1.2, stars: 5, effort: 0, covered: true },
     ],
     gondola: [
       { name: '8-seat gondola', speedFactor: 1, capacityFactor: 1, upgradeCostFactor: 0, stars: 0, effort: 0, covered: true },
       { name: '10-seat gondola', speedFactor: 1.2, capacityFactor: 1.5, upgradeCostFactor: 0.6, stars: 4, effort: 0, covered: true },
+      { name: '3S gondola', speedFactor: 1.5, capacityFactor: 1.7, upgradeCostFactor: 1.5, stars: 5, effort: 0, covered: true },
     ],
   } satisfies Record<LiftType, readonly LiftTier[]>,
   /** Stars needed before a lift type can be built. */

@@ -15,12 +15,14 @@ type Carrier =
   | { readonly kind: 'chair'; readonly seats: number; readonly bubble: boolean }
   | { readonly kind: 'cabin'; readonly seats: number };
 
-/** What hangs off the cable for each lift type and upgrade tier, matching the tier names in the config. */
-function carrierFor(type: LiftType, tier: number): Carrier {
-  if (type === 'ropeTow') return tier === 0 ? { kind: 'rope' } : { kind: 'tbar' };
-  if (type === 'gondola') return { kind: 'cabin', seats: tier === 0 ? 8 : 10 };
-  return { kind: 'chair', seats: [2, 4, 4, 6][tier] ?? 4, bubble: tier >= 3 };
-}
+/** What hangs off the cable for each lift type and upgrade tier, in the order of the tiers in the config. */
+const CARRIERS: Record<LiftType, readonly Carrier[]> = {
+  // A platter is a single rider on a pole, drawn like a one-sided T-bar.
+  ropeTow: [{ kind: 'rope' }, { kind: 'tbar' }, { kind: 'tbar' }],
+  chairlift: [2, 3, 4, 4, 6, 8].map((seats, i) => ({ kind: 'chair', seats, bubble: i >= 4 }) as const),
+  gondola: [{ kind: 'cabin', seats: 8 }, { kind: 'cabin', seats: 10 }, { kind: 'cabin', seats: 12 }],
+};
+const carrierFor = (type: LiftType, tier: number): Carrier => CARRIERS[type][tier] ?? CARRIERS[type][0]!;
 
 export interface Rider {
   readonly id: number;
