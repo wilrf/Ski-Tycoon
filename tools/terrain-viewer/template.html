@@ -30,6 +30,7 @@
   --accent: #6fb6d6; --marker: #e8794c; --clay: #9d968c; --sky: #1b2731; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -67,8 +68,8 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; 
 .exag input { width: 110px; accent-color: var(--accent); }
 .exag output { font-family: var(--mono); font-size: 12px; min-width: 3.5ch; }
 
-.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-.fact { background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.fact { flex: 1 1 128px; background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .fact .v { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 .stage { position: relative; background: var(--sky); border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 10; max-width: 100%; touch-action: none; cursor: grab; }
