@@ -1,4 +1,5 @@
 import type { PeakEntry } from '../data/peaks';
+import { PEAK_TREELINE_M, RANGE_SURFACE } from '../data/rangeSurface';
 import { CONFIG } from '../config';
 import { fractal, gradientNoise } from './noise';
 import { terrainFromGrid, type Terrain } from './terrain';
@@ -11,5 +12,6 @@ export function peakTerrain(entry: PeakEntry, packed: ArrayBuffer, seed: number)
   const h = Float64Array.from({ length: size * size }, (_, i) => entry.minHeight + view.getUint16(i * 2, true) / 10);
   const forest = fractal(gradientNoise(seed ^ 0xf0), 2, 0.5);
   // Forest patches keep the same size on the ground whatever the map's cell size.
-  return terrainFromGrid({ size, cellSize: entry.cellSize, h }, (p) => 0.5 + 0.5 * forest(p.x / 90, p.y / 90));
+  const treeline = PEAK_TREELINE_M[entry.id] ?? RANGE_SURFACE[entry.range].treelineM;
+  return terrainFromGrid({ size, cellSize: entry.cellSize, h }, (p) => 0.5 + 0.5 * forest(p.x / 90, p.y / 90), treeline);
 }

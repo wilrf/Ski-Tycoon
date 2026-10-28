@@ -120,8 +120,8 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; 
       <div class="controls">
         <div class="seg" id="seedSeg" role="group" aria-label="Mountain"></div>
         <div class="seg" role="group" aria-label="Colour">
-          <button type="button" id="modeClay" aria-pressed="true">Shape</button>
-          <button type="button" id="modeTint" aria-pressed="false">Tint</button>
+          <button type="button" id="modeClay" aria-pressed="false">Shape</button>
+          <button type="button" id="modeTint" aria-pressed="true">Tint</button>
         </div>
         <label class="exag" for="exag">Height ×<input id="exag" type="range" min="1" max="2.5" step="0.1" value="1"><output id="exagOut">1.0</output></label>
       </div>
@@ -149,7 +149,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; 
       <div class="label">Generator settings for this range</div>
       <div class="knobs" id="knobs"></div>
     </section>
-    <p class="note" id="tintNote">Tint colours are placeholders until the surface layer: green low down, bare rock on steep ground, snow high up. Shape mode shows the landform alone.</p>
+    <p class="note" id="tintNote">Tint shows winter at real altitude: forest only below the range's real tree line, snow wherever it can lie, and bare rock on ground too steep to hold snow. Shape mode shows the landform alone.</p>
   </main>
 </div>
 
@@ -180,24 +180,36 @@ function decode(b64, count, min) {
 }
 
 // One shape per selectable item: a square game map, or a real face window.
-function surface(z, w, h, cell) {
+function surface(z, w, h, cell, treeline) {
   let lo = Infinity, hi = -Infinity;
   for (const v of z) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-  return { z, w, h, cell, lo, hi };
+  return { z, w, h, cell, lo, hi, treeline: treeline ?? Infinity };
+}
+
+// Smooth noise in [0, 1] with a lattice `k` cells wide: clumps of forest rather than speckle.
+function clumps(x, y, k) {
+  const hash = (a, b) => { let t = Math.imul(a, 374761393) ^ Math.imul(b, 668265263); t = Math.imul(t ^ (t >>> 13), 1274126177); return ((t ^ (t >>> 16)) >>> 0) / 4294967296; };
+  const gx = x / k, gy = y / k, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  return (hash(x0, y0) * (1 - sx) + hash(x0 + 1, y0) * sx) * (1 - sy) + (hash(x0, y0 + 1) * (1 - sx) + hash(x0 + 1, y0 + 1) * sx) * sy;
 }
 
 const css = () => getComputedStyle(document.documentElement);
 const hex = (s) => { const c = s.trim().replace('#', ''); return [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16) / 255); };
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
-/* Colour of a cell: clay for shape mode; a placeholder land ramp for tint mode. */
+/* Colour of a cell in winter. Shape mode is plain clay. Tint mode uses the real altitude: snow everywhere it can lie,
+   bare rock where the ground is too steep to hold snow (about 35-45 degrees), and forest only below the range's real
+   tree line, thinning over its last 300 m. */
 function colourAt(s, i, slopeDeg, mode, clay) {
   if (mode === 'clay') return clay;
-  const t = (s.z[i] - s.lo) / Math.max(1, s.hi - s.lo);
-  const forest = [0.33, 0.45, 0.3], meadow = [0.6, 0.62, 0.45], rock = [0.55, 0.53, 0.5], snow = [0.95, 0.96, 0.97];
-  let c = t < 0.45 ? mix(forest, meadow, t / 0.45) : mix(meadow, rock, Math.min(1, (t - 0.45) / 0.3));
-  if (slopeDeg > 34) c = mix(c, rock, Math.min(1, (slopeDeg - 34) / 10));
-  if (t > 0.72 && slopeDeg < 45) c = mix(c, snow, Math.min(1, (t - 0.72) / 0.12));
+  const snow = [0.93, 0.95, 0.97], rock = [0.42, 0.41, 0.4], forest = [0.16, 0.27, 0.2];
+  let c = mix(snow, rock, Math.min(1, Math.max(0, (slopeDeg - 35) / 10)));
+  const below = s.treeline - s.z[i];
+  if (below > 0 && slopeDeg < 42) {
+    const density = Math.min(1, below / 300), x = i % s.w, y = (i - x) / s.w;
+    if (clumps(x, y, 6 * 30 / s.cell) < 0.25 + 0.55 * density) c = mix(c, forest, 0.85);
+  }
   return c;
 }
 
@@ -354,12 +366,12 @@ stage.addEventListener('wheel', (e) => { e.preventDefault(); view.dist *= Math.e
 const items = [];
 for (const r of DATA.ranges) items.push({
   id: `range-${r.key.replace(/_/g, '-')}`, group: 'Generated ranges', kind: 'range', title: r.name, data: r,
-  shapes: r.mountains.map((m) => surface(decode(m.b64, m.n * m.n, m.min), m.n, m.n, m.cell)),
-  real: r.real.map((f) => surface(decode(f.b64, f.w * f.h, f.min), f.w, f.h, f.cell)),
+  shapes: r.mountains.map((m) => surface(decode(m.b64, m.n * m.n, m.min), m.n, m.n, m.cell, r.surface.treelineM)),
+  real: r.real.map((f) => surface(decode(f.b64, f.w * f.h, f.min), f.w, f.h, f.cell, r.surface.treelineM)),
 });
 for (const p of DATA.peaks) items.push({
   id: p.id, group: 'Famous peaks', kind: 'peak', title: p.name.replace(/ \(.*\)$/, ''), data: p,
-  shapes: [surface(decode(p.b64, p.n * p.n, p.min), p.n, p.n, p.cell)], real: [],
+  shapes: [surface(decode(p.b64, p.n * p.n, p.min), p.n, p.n, p.cell, p.treelineM)], real: [],
 });
 
 const nav = document.getElementById('index');
@@ -388,7 +400,7 @@ function buildIndex() {
   nav.append(ranges, peaks);
 }
 
-let current = null, shapeIndex = 0, mode = 'clay', exag = 1;
+let current = null, shapeIndex = 0, mode = 'tint', exag = 1;
 const $ = (id) => document.getElementById(id);
 
 function fact(label, value) { return `<div class="fact"><span class="label">${label}</span><span class="v">${value}</span></div>`; }
@@ -400,7 +412,8 @@ function render() {
   if (it.kind === 'range') {
     $('kind').textContent = `Generated · ${d.name} character · seed ${d.mountains[shapeIndex].seed}`;
     $('facts').innerHTML = [
-      fact('Face relief', `${fmt(s.hi - s.lo)} m`), fact('Map', `${fmt(extent / 1000, 1)} × ${fmt(extent / 1000, 1)} km`),
+      fact('Altitude', `${fmt(s.lo)}–${fmt(s.hi)} m`), fact('Tree line', `${fmt(d.surface.treelineM)} m`),
+      fact('Map', `${fmt(extent / 1000, 1)} × ${fmt(extent / 1000, 1)} km`),
       fact('Grid', `${s.w} × ${s.h} · ${s.cell} m`), fact('Fit error', d.fitLoss == null ? '–' : fmt(d.fitLoss, 3)),
     ].join('');
     $('planCap').textContent = 'Summit near the top, base along the bottom: the game map. Lit from the north-west.';
@@ -408,7 +421,8 @@ function render() {
     const dir = COMPASS[Math.round(((d.bearingDeg + 180) % 360) / 22.5) % 16], up = COMPASS[Math.round(d.bearingDeg / 22.5) % 16];
     $('kind').textContent = `Real terrain · ${byRange[d.range]} · ${fmt(Math.abs(d.lat), 3)}°${d.lat >= 0 ? 'N' : 'S'} ${fmt(Math.abs(d.lon), 3)}°${d.lon >= 0 ? 'E' : 'W'}`;
     $('facts').innerHTML = [
-      fact('Summit', `${fmt(d.summitM)} m`), fact('Relief in map', `${fmt(s.hi - s.lo)} m`),
+      fact('Summit', `${fmt(d.summitM)} m`), fact('Altitude in map', `${fmt(s.lo)}–${fmt(s.hi)} m`),
+      fact('Tree line', d.treelineM == null ? 'forested to the top' : `${fmt(d.treelineM)} m`),
       fact('Map', `${fmt(extent / 1000, 1)} × ${fmt(extent / 1000, 1)} km`), fact('Grid', `${s.w} × ${s.h} · ${fmt(s.cell, 1)} m`),
       fact('Wikipedia views', `${fmt(d.views)}`), fact('Face looks', `${dir}`),
     ].join('');

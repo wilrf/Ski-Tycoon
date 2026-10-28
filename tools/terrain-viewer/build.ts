@@ -10,6 +10,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PEAKS } from '../../src/data/peaks';
 import { RANGE_PARAMS } from '../../src/data/rangeParams';
+import { PEAK_TREELINE_M, RANGE_SURFACE } from '../../src/data/rangeSurface';
 import { generateRangeGrid } from '../../src/sim/rangeTerrain';
 import { RANGE_KEYS, RANGE_NAMES } from '../../src/sim/ranges';
 import { createRng, nextFloat } from '../../src/sim/rng';
@@ -48,16 +49,19 @@ function realFaces(key: string): { w: number; h: number; cell: number; min: numb
 const fitReport = JSON.parse(readFileSync(join(ROOT, 'tools/terrain-stats/results/fit-report.json'), 'utf8'));
 const data = {
   ranges: RANGE_KEYS.map((key) => ({
-    key, name: RANGE_NAMES[key], params: RANGE_PARAMS[key], fitLoss: fitReport[key]?.loss ?? null,
+    key, name: RANGE_NAMES[key], params: RANGE_PARAMS[key], fitLoss: fitReport[key]?.loss ?? null, surface: RANGE_SURFACE[key],
     mountains: SEEDS.map((seed) => {
+      // Lifted to the range's real base altitude, as the game does, so the tree line applies.
       const g = generateRangeGrid(seed, RANGE_PARAMS[key]);
-      return { seed, n: g.size, cell: g.cellSize, ...pack(g.h) };
+      return { seed, n: g.size, cell: g.cellSize, ...pack(g.h.map((v) => v + RANGE_SURFACE[key].baseM)) };
     }),
     real: realFaces(key),
   })),
   peaks: PEAKS.map((p) => {
     const b = readFileSync(join(ROOT, 'public/terrain/peaks', `${p.id}.bin`));
-    return { ...p, n: 160, cell: p.cellSize, min: p.minHeight, b64: b.toString('base64') };
+    // No tree line (forested to the summit) is sent as null; JSON has no Infinity.
+    const treeline = PEAK_TREELINE_M[p.id] ?? RANGE_SURFACE[p.range].treelineM;
+    return { ...p, n: 160, cell: p.cellSize, min: p.minHeight, treelineM: Number.isFinite(treeline) ? treeline : null, b64: b.toString('base64') };
   }),
 };
 

@@ -4,6 +4,7 @@ import { CONFIG } from '../src/config';
 import { vec } from '../src/sim/geometry';
 import { PEAKS } from '../src/data/peaks';
 import { RANGE_PARAMS } from '../src/data/rangeParams';
+import { PEAK_TREELINE_M, RANGE_SURFACE } from '../src/data/rangeSurface';
 import { fillPits } from '../src/sim/erosion';
 import { peakTerrain } from '../src/sim/peakTerrain';
 import { generateRangeGrid, generateRangeTerrain } from '../src/sim/rangeTerrain';
@@ -20,10 +21,13 @@ const peakBytes = (id: string): ArrayBuffer => {
 
 describe('range mountains', () => {
   it.each(RANGE_KEYS)('%s gives a playable map with flat base ground', (key) => {
-    const t = generateRangeTerrain(3, RANGE_PARAMS[key]);
+    const t = generateRangeTerrain(3, RANGE_PARAMS[key], RANGE_SURFACE[key]);
     expect(t.size).toBe(CONFIG.terrain.size);
     expect(t.heights.every(Number.isFinite)).toBe(true);
     expect(baseCells(t)).toBeGreaterThan(t.size * 10);
+    // Lifted to the range's real altitude, so its tree line means something.
+    expect(Math.min(...t.heights)).toBeGreaterThan(RANGE_SURFACE[key].baseM - 50);
+    t.types.forEach((k, i) => { if (k === TerrainType.Forest) expect(t.heights[i]!).toBeLessThan(RANGE_SURFACE[key].treelineM); });
     // The summit is near the top of the map, as on the default mountain.
     const top = t.heights.indexOf(Math.max(...t.heights));
     expect(Math.floor(top / t.size)).toBeLessThan(t.size * 0.4);
@@ -48,7 +52,7 @@ describe('range mountains', () => {
       for (let i = 0; i < t.heights.length - t.size - 1; i++) sum += Math.hypot(t.heights[i + 1]! - t.heights[i]!, t.heights[i + t.size]! - t.heights[i]!) / t.cellSize;
       return sum / t.heights.length;
     };
-    expect(meanGrade(generateRangeTerrain(1, RANGE_PARAMS.himalayas))).toBeGreaterThan(meanGrade(generateRangeTerrain(1, RANGE_PARAMS.appalachians)) * 1.3);
+    expect(meanGrade(generateRangeTerrain(1, RANGE_PARAMS.himalayas, RANGE_SURFACE.himalayas))).toBeGreaterThan(meanGrade(generateRangeTerrain(1, RANGE_PARAMS.appalachians, RANGE_SURFACE.appalachians)) * 1.3);
   });
 });
 
@@ -67,6 +71,21 @@ describe('famous peaks', () => {
     for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) expect(t.heights[(row + dy) * n + col + dx]!).toBeLessThan(summit + 5);
     expect(Math.abs(summit - entry.summitM)).toBeLessThan(100);
     expect(baseCells(t)).toBeGreaterThan(n * 5);
+  });
+
+  it('grows forest only below the real tree line', () => {
+    const forestShare = (t: Terrain): number => t.types.filter((k) => k === TerrainType.Forest).length / t.types.length;
+    for (const entry of PEAKS) {
+      const t = peakTerrain(entry, peakBytes(entry.id), 1);
+      const treeline = PEAK_TREELINE_M[entry.id] ?? RANGE_SURFACE[entry.range].treelineM;
+      t.types.forEach((k, i) => { if (k === TerrainType.Forest) expect(t.heights[i]!).toBeLessThan(treeline); });
+    }
+    const share = (id: string): number => forestShare(peakTerrain(PEAKS.find((p) => p.id === id)!, peakBytes(id), 1));
+    // The Matterhorn map starts near 2,300 m, above Zermatt's 2,200 m tree line; Everest's starts above 5,000 m.
+    expect(share('matterhorn')).toBe(0);
+    expect(share('mount-everest')).toBe(0);
+    // The Smokies are forested to the top.
+    expect(share('kuwohi')).toBeGreaterThan(0.2);
   });
 
   it('rejects a heightmap of the wrong size', () => {

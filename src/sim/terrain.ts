@@ -42,28 +42,35 @@ export function cellGrade(t: Terrain, cx: number, cy: number): number {
   return Math.hypot(dx, dy);
 }
 
-/** Builds a terrain from a height function of metre coordinates. Types come from elevation and slope. */
-export function terrainFromHeights(size: number, cellSize: number, height: (p: Vec2) => number, forest: (p: Vec2) => number = () => 0): Terrain {
+/**
+ * Builds a terrain from a height function of metre coordinates. Types come from elevation and slope.
+ * With `treelineM`, heights are real altitudes: forest grows only below that altitude, thinning over the last 300 m
+ * as real forest does. Without it, the default mountain's rule applies: forest in the lower part of the mountain.
+ */
+export function terrainFromHeights(size: number, cellSize: number, height: (p: Vec2) => number, forest: (p: Vec2) => number = () => 0, treelineM?: number): Terrain {
   const centre = (i: number): Vec2 => vec(((i % size) + 0.5) * cellSize, (Math.floor(i / size) + 0.5) * cellSize);
   // Rounded to 10 cm to keep saves small; `|| 0` turns -0, which JSON can't hold, into 0.
   const heights = Array.from({ length: size * size }, (_, i) => Math.round(height(centre(i)) * 10) / 10 || 0);
   const t: Terrain = { size, cellSize, heights, types: [] };
   const maxHeight = Math.max(...heights);
   const baseY = CONFIG.terrain.baseLine * size * cellSize;
+  const isForest = (h: number, f: number): boolean => treelineM === undefined
+    ? h < maxHeight * CONFIG.terrain.treelineFraction && f > 0.65
+    : h < treelineM && f > 0.4 + 0.25 * clamp(1 - (treelineM - h) / 300, 0, 1);
   for (let i = 0; i < heights.length; i++) {
     const p = centre(i), grade = cellGrade(t, i % size, Math.floor(i / size));
     t.types[i] =
       p.y >= baseY && grade < 0.15 ? TerrainType.Base
       : grade > CONFIG.terrain.rockGrade ? TerrainType.Rock
-      : heights[i]! < maxHeight * CONFIG.terrain.treelineFraction && forest(p) > 0.65 ? TerrainType.Forest
+      : isForest(heights[i]!, forest(p)) ? TerrainType.Forest
       : TerrainType.Snow;
   }
   return t;
 }
 
-/** Builds a terrain from a ready-made height grid (generated or real), one height per cell. */
-export const terrainFromGrid = (grid: HeightGrid, forest?: (p: Vec2) => number): Terrain =>
-  terrainFromHeights(grid.size, grid.cellSize, (p) => grid.h[Math.floor(p.y / grid.cellSize) * grid.size + Math.floor(p.x / grid.cellSize)]!, forest);
+/** Builds a terrain from a ready-made height grid of real altitudes (generated or real), one height per cell. */
+export const terrainFromGrid = (grid: HeightGrid, forest: (p: Vec2) => number, treelineM: number): Terrain =>
+  terrainFromHeights(grid.size, grid.cellSize, (p) => grid.h[Math.floor(p.y / grid.cellSize) * grid.size + Math.floor(p.x / grid.cellSize)]!, forest, treelineM);
 
 /** Smooth value noise in [0, 1] with lattice spacing `scale` metres. */
 function valueNoise(rng: Rng, extent: number, scale: number): (x: number, y: number) => number {

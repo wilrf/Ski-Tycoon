@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import type { RangeSurface } from '../data/rangeSurface';
 import { fillPits, incise, slide, soften, type HeightGrid } from './erosion';
 import { clamp } from './geometry';
 import { fractal, gradientNoise } from './noise';
@@ -71,8 +72,10 @@ function easeBase({ size, cellSize, h }: HeightGrid, baseLine: number): void {
   }
 }
 
-export function generateRangeTerrain(seed: number, p: RangeParams): Terrain {
+/** A playable mountain in a range's character, lifted to the range's real base altitude so its tree line applies. */
+export function generateRangeTerrain(seed: number, p: RangeParams, surface: RangeSurface): Terrain {
   const grid = generateRangeGrid(seed, p);
+  for (let i = 0; i < grid.h.length; i++) grid.h[i] += surface.baseM;
   const forest = fractal(gradientNoise(seed ^ 0xf0), 2, 0.5);
-  return terrainFromGrid(grid, (pt) => 0.5 + 0.5 * forest(pt.x / 90, pt.y / 90));
+  return terrainFromGrid(grid, (pt) => 0.5 + 0.5 * forest(pt.x / 90, pt.y / 90), surface.treelineM);
 }
