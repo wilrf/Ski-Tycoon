@@ -7,7 +7,7 @@ import type { Vec2 } from '../sim/geometry';
 import type { World } from '../sim/world';
 
 /** Bump this whenever the saved shape of World changes, and add a migration from the previous version. */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = 'summit-tycoon/save';
 
 export interface SaveFile {
@@ -101,6 +101,23 @@ const MIGRATIONS: Readonly<Record<number, (save: VersionedData) => VersionedData
           skiers: (r['skiers'] as Obj[]).map((s) => ({ ...s, apresLoyalty: 0 })),
           apresPrice: 'medium',
           today: { ...(r['today'] as Obj), apresGuests: 0, apresTurnedAway: 0 },
+        })),
+      },
+    };
+  },
+  // Version 5 added the platter lift and the triple chair partway up their upgrade paths, so saved tiers shift.
+  4: (save) => {
+    type Obj = Record<string, unknown>;
+    const w = save.world as Obj;
+    const shift: Record<string, readonly number[]> = { ropeTow: [0, 2], chairlift: [0, 2, 3, 4], gondola: [0, 1] };
+    return {
+      ...save,
+      version: 5,
+      world: {
+        ...w,
+        resorts: (w['resorts'] as Obj[]).map((r) => ({
+          ...r,
+          lifts: (r['lifts'] as Obj[]).map((l) => ({ ...l, tier: shift[l['type'] as string]![l['tier'] as number] ?? l['tier'] })),
         })),
       },
     };
