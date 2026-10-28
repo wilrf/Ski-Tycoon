@@ -38,24 +38,23 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
   if (edge > 0) {
     // The edge follows the ground, so on the tilted map it rises and dips over the ridges it crosses.
     const line = Array.from({ length: 65 }, (_, i) => at(vec((extent * i) / 64, edge)));
-    const bottom = Math.max(...line.map((p) => p.y));
-    const fog = ctx.createLinearGradient(0, bottom - 60, 0, bottom);
-    fog.addColorStop(0, 'rgba(225, 232, 245, 0.78)');
-    fog.addColorStop(1, 'rgba(225, 232, 245, 0.35)');
-    ctx.fillStyle = fog;
+    const bottom = Math.max(...line.map((p) => p.y)), reach = Math.max(120, view.height * 0.2);
+    // Land not yet bought sits in a soft cloud shadow that fades out toward the summit, so the peak stays clear.
+    const shade = ctx.createLinearGradient(0, bottom, 0, bottom - reach);
+    shade.addColorStop(0, 'rgba(60, 76, 130, 0.2)');
+    shade.addColorStop(1, 'rgba(60, 76, 130, 0)');
+    ctx.fillStyle = shade;
     ctx.beginPath();
-    ctx.moveTo(line[0]!.x, 0);
+    ctx.moveTo(line[0]!.x, bottom - reach);
     for (const p of line) ctx.lineTo(p.x, p.y);
-    ctx.lineTo(line[line.length - 1]!.x, 0);
+    ctx.lineTo(line[line.length - 1]!.x, bottom - reach);
     ctx.closePath();
     ctx.fill();
-    ctx.setLineDash([10, 8]);
-    ctx.strokeStyle = 'rgba(23, 35, 61, 0.7)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.stroke();
-    ctx.setLineDash([]);
     const next = CONFIG.land[resort.land]!;
     // Just above the edge, unless that's under the HUD; then just below it.
     pill(ctx, vec(view.width / 2, bottom > 190 ? bottom - 20 : bottom + 20), `🔒 ${next.name} · ${next.stars}★ · ${money(next.cost)}`);
@@ -106,7 +105,7 @@ function slopeGuide(t: Terrain): Tilted {
     g.fillStyle = GUIDE_COLORS[gradeToDifficulty(cellGrade(t, cx, cy))]!;
     g.fillRect(cx, cy, 1, 1);
   }
-  const tilted = tiltImage(canvas, t, { pad: 0, scenery: false });
+  const tilted = tiltImage(canvas, t, { pad: 0, shaded: false });
   guides.set(t, tilted);
   return tilted;
 }

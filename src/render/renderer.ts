@@ -8,7 +8,7 @@ import type { Skier } from '../sim/skiers';
 import { activeResort, type World } from '../sim/world';
 import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
 import { SIN, toScreen, visibleBounds, type Camera, type View } from './camera';
-import { drawTilted } from './tilt';
+import { drawTilted, SUNRISE } from './tilt';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
@@ -237,13 +237,7 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { at, px, stroke, drawRun, liftStructure } = painter(ctx, camera, view);
   const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
 
-  const sky = ctx.createLinearGradient(0, 0, 0, view.height);
-  // A clear alpine sky: deep blue overhead, paling to haze at the horizon behind the far ranges.
-  sky.addColorStop(0, '#2f6fc9');
-  sky.addColorStop(0.55, '#79abe3');
-  sky.addColorStop(1, '#c4d8ee');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, view.width, view.height);
+  drawSky(ctx, f);
   noteSkiers(world);
   const layer = updateStill(ctx, f);
   // The layer is at device pixels, so paste it with the canvas's scale undone.
@@ -347,6 +341,9 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     for (const id of headings.keys()) if (!here.has(id)) headings.delete(id);
   }
 
+  // Until the first lift goes in, a card names the mountain, like the sign at the foot of a real one.
+  if (world.calendar.day === 1 && resort.lifts.length === 0) nameCard(ctx, resort.name, Math.max(...resort.terrain.heights));
+
   // Trail-map labels once zoomed in far enough to read them.
   if (camera.zoom > 0.45) {
     for (const run of resort.runs) {
@@ -359,6 +356,47 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const headings = new Map<number, number>();
+
+/**
+ * A sunrise sky: deep blue overhead paling to peach at the skyline, the sun's glow low in the east, and a few
+ * streaks of lit cloud. It sits behind the far ranges baked into the mountain picture.
+ */
+function drawSky(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const { camera, view } = f;
+  const horizon = (f.terrain.tilted.horizon - camera.y * SIN) * camera.zoom + view.height / 2;
+  const bottom = Math.max(80, horizon);
+  const sky = ctx.createLinearGradient(0, 0, 0, bottom);
+  SUNRISE.sky.forEach((c, i) => sky.addColorStop(i / (SUNRISE.sky.length - 1), c));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, view.width, view.height);
+  // Below the horizon lies the sea of cloud the mountain rises from, past the edge of the painted land too.
+  const sea = ctx.createLinearGradient(0, bottom, 0, view.height);
+  sea.addColorStop(0, '#ffe9dc');
+  sea.addColorStop(0.35, SUNRISE.cloud);
+  sea.addColorStop(1, '#e4d3e2');
+  ctx.fillStyle = sea;
+  ctx.fillRect(0, bottom, view.width, view.height - bottom);
+  const sx = view.width * 0.86, sy = bottom - 60;
+  const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, view.width * 0.5);
+  glow.addColorStop(0, 'rgba(255, 224, 168, 0.95)');
+  glow.addColorStop(0.08, 'rgba(255, 224, 168, 0.6)');
+  glow.addColorStop(0.4, 'rgba(255, 224, 168, 0.18)');
+  glow.addColorStop(1, 'rgba(255, 224, 168, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, view.width, view.height);
+  // Cloud streaks hang at fixed places over the skyline, so they drift past as the camera pans.
+  const drift = -camera.x * camera.zoom * 0.3;
+  for (let i = 0; i < 5; i++) {
+    const w = view.width * (0.16 + 0.05 * (i % 3)), x = ((view.width * (0.1 + 0.21 * i) + drift) % (view.width * 1.2) + view.width * 1.2) % (view.width * 1.2) - view.width * 0.1;
+    const y = bottom - 150 - (i % 2) * 70 - (i % 3) * 25;
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = k === 0 ? 'rgba(255, 210, 166, 0.85)' : 'rgba(190, 170, 205, 0.7)';
+      ctx.beginPath();
+      ctx.roundRect(x + k * w * 0.12, y + k * 7, w * (1 - k * 0.25), 6, 3);
+      ctx.fill();
+    }
+  }
+}
 
 const stancePose = (stance: Stance): Pose => (stance === 'parallel' ? 'skis' : stance);
 
@@ -401,6 +439,23 @@ export function difficultySymbol(ctx: CanvasRenderingContext2D, c: Vec2, level: 
   }
   if (level === 2) diamond(c.x);
   if (level === 3) [-r * 0.9, r * 0.9].forEach((dx) => diamond(c.x + dx));
+}
+
+function nameCard(ctx: CanvasRenderingContext2D, name: string, summit: number): void {
+  // Generated mountains have no real elevation, so only real peaks state their summit.
+  const detail = summit > 1500 ? `Summit ${Math.round(summit).toLocaleString('en-US')} m · first morning` : 'First morning';
+  ctx.font = `900 26px ${UI_FONT}`;
+  const w = Math.max(ctx.measureText(name).width, (ctx.font = `700 13px ${UI_FONT}`, ctx.measureText(detail).width)) + 36;
+  ctx.fillStyle = 'rgba(16, 28, 56, 0.62)';
+  ctx.beginPath();
+  ctx.roundRect(16, 76, w, 66, 14);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `900 26px ${UI_FONT}`;
+  ctx.fillText(name, 34, 108);
+  ctx.fillStyle = '#ffd27a';
+  ctx.font = `700 13px ${UI_FONT}`;
+  ctx.fillText(detail, 34, 130);
 }
 
 function mapLabel(ctx: CanvasRenderingContext2D, p: Vec2, text: string, italic = false): void {

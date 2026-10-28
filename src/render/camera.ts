@@ -6,7 +6,7 @@ import { heightAt, terrainExtent, type Terrain } from '../sim/terrain';
  * sin(PITCH) and height lifts a point up the screen by cos(PITCH). The view stays orthographic, so panning and
  * zooming only move and scale the picture.
  */
-export let SIN = Math.sin((48 * Math.PI) / 180), COS = Math.cos((48 * Math.PI) / 180);
+export let SIN = Math.sin((38 * Math.PI) / 180), COS = Math.cos((38 * Math.PI) / 180);
 /** Changes the tilt; mountains baked before must be baked again. */
 export function setPitch(degrees: number): void {
   SIN = Math.sin((degrees * Math.PI) / 180);
@@ -17,6 +17,8 @@ export function setPitch(degrees: number): void {
 let ground: (p: Vec2) => number = () => 0;
 let groundExtent = 1600;
 let relief = 0;
+/** The highest point of the current mountain, which the opening view frames. */
+let summit: Vec2 = vec(800, 0);
 
 /** Points the camera at a new mountain's ground. */
 export function setGround(t: Terrain): void {
@@ -25,6 +27,8 @@ export function setGround(t: Terrain): void {
   ground = (p) => heightAt(t, p) - low;
   groundExtent = terrainExtent(t);
   relief = Math.max(...t.heights) - low;
+  const top = t.heights.indexOf(Math.max(...t.heights));
+  summit = vec(((top % t.size) + 0.5) * t.cellSize, (Math.floor(top / t.size) + 0.5) * t.cellSize);
 }
 
 /** Height on screen of a world point, in metres along the screen's vertical, before zoom. */
@@ -79,15 +83,17 @@ export function visibleBounds(c: Camera, v: View, margin = 0): { min: Vec2; max:
 
 /** Leaves room for the HUD above and the toolbar below. */
 /** Zoomed out, the map and the made-up land either side of it still fill the screen's width. */
-const fitZoom = (extent: number, v: View): number => (v.width / extent) * 1.5;
+const fitZoom = (extent: number, v: View): number => (v.width / extent) * 1.15;
 
 /**
- * Fills the screen with the map (no empty margins) and puts the base area just above the toolbar,
- * since building starts there; the player pans up toward the peak.
+ * The opening view: the summit high in the frame with the base village at the bottom, the way a mountain is first
+ * seen from the valley road, and never narrower than the screen.
  */
 export function fitCamera(extent: number, v: View): Camera {
-  const zoom = Math.max(v.width, v.height - 150) / extent;
-  return { x: extent / 2, y: Math.max(extent / 2, extent - (v.height / 2 - 80) / (zoom * SIN)), zoom };
+  const base = vec(extent / 2, extent);
+  const zoom = Math.min(v.width / extent, (v.height * 0.64) / Math.max(1, lifted(base) - lifted(summit)));
+  const x = (summit.x + extent / 2) / 2;
+  return { x, y: (lifted(summit) - (v.height * 0.28 - v.height / 2) / zoom) / SIN, zoom };
 }
 
 /** Keeps the zoom between half the fit-to-screen scale and MAX_ZOOM, and the centre on the map. */

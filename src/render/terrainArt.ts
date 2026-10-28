@@ -70,7 +70,7 @@ export function bakeTerrain({ terrain: t, entrance }: Pick<Resort, 'terrain' | '
   ctx.scale(scale, scale);
   drawBase(ctx, entrance);
   const trees = plantTrees(t, entrance);
-  return { ground, trees, tilted: tiltImage(ground, t, { pad: 450, scenery: true, trees }) };
+  return { ground, trees, tilted: tiltImage(ground, t, { pad: terrainExtent(t) * 0.4, shaded: true, trees }) };
 }
 
 /** Smooth noise in [0, 1] on a lattice `cell` pixels wide, built from the hash so it needs no state. */
