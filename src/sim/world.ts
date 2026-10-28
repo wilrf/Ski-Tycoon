@@ -115,8 +115,14 @@ export type WorldEvent = DayReport | { readonly type: 'requestDone'; readonly re
 
 const emptyStats = (): DayStats => ({ arrivals: 0, regulars: 0, leftHappy: 0, leftUnhappy: 0, meals: 0, apresGuests: 0, apresTurnedAway: 0, movedUp: 0, maxWait: 0, feelings: {} });
 
-export function createWorld(seed: number): World {
-  const terrain = generateTerrain(seed);
+/** A mountain to build on: its terrain and the resort's starting name. */
+export interface MountainSite {
+  readonly terrain: Terrain;
+  readonly name: string;
+}
+
+export function createWorld(seed: number, site: MountainSite = { terrain: generateTerrain(seed), name: 'Summit Peak' }): World {
+  const { terrain, name } = site;
   const extent = terrainExtent(terrain);
   const rng = createRng(seed ^ 0x5eed);
   const world: World = {
@@ -129,7 +135,7 @@ export function createWorld(seed: number): World {
     requests: [],
     reviews: [],
     resorts: [{
-      name: 'Summit Peak', terrain, entrance: vec(extent / 2, extent - 15),
+      name, terrain, entrance: vec(extent / 2, extent - 15),
       lifts: [], runs: [], buildings: [], skiers: [], guests: [], coming: [],
       arrivalCredit: 0, regularCredit: 0, regularsPerSecond: 0,
       ticketPrice: CONFIG.economy.fairTicketPrice, apresPrice: 'medium', reputation: CONFIG.reputation.start, land: 1,
@@ -189,15 +195,19 @@ function planDay(world: World, resort: Resort): void {
   resort.regularsPerSecond = resort.coming.length / ARRIVAL_SECONDS;
 }
 
-// The peak height is fixed for a terrain, and the storm check needs it every tick.
-const peaks = new WeakMap<Terrain, number>();
-const peakOf = (t: Terrain): number => peaks.get(t) ?? peaks.set(t, Math.max(...t.heights)).get(t)!;
+// A terrain's height span is fixed, and the storm check needs it every tick.
+const spans = new WeakMap<Terrain, { low: number; high: number }>();
+const spanOf = (t: Terrain): { low: number; high: number } =>
+  spans.get(t) ?? spans.set(t, { low: Math.min(...t.heights), high: Math.max(...t.heights) }).get(t)!;
 
-/** Lifts the wind has stopped today: exposed seats whose top station is high on the mountain. */
+/**
+ * Lifts the wind has stopped today: exposed seats whose top station is high on the mountain. "High" is measured
+ * from the map's lowest point, so a real peak whose base sits 5,000 m up is judged like any other mountain.
+ */
 export function heldLifts(world: World, resort: Resort): Set<number> {
   if (!weatherSpec(world.weather.today).windHold) return new Set();
-  const peak = peakOf(resort.terrain);
-  return new Set(resort.lifts.filter((l) => !isCovered(l) && heightAt(resort.terrain, l.top) > peak * windHoldHeight(l)).map((l) => l.id));
+  const { low, high } = spanOf(resort.terrain);
+  return new Set(resort.lifts.filter((l) => !isCovered(l) && heightAt(resort.terrain, l.top) - low > (high - low) * windHoldHeight(l)).map((l) => l.id));
 }
 
 /** Advances the world by one fixed step of dt game seconds. */
