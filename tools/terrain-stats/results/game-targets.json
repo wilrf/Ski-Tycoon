@@ -1,0 +1,462 @@
+{
+ "alps": {
+  "windows": 2376,
+  "faces": 1188,
+  "stats": {
+   "relief_m": {
+    "mean": 707.9906,
+    "sd": 138.5532
+   },
+   "slope_mean_deg": {
+    "mean": 30.4578,
+    "sd": 4.2895
+   },
+   "slope_p90_deg": {
+    "mean": 43.3511,
+    "sd": 5.7261
+   },
+   "frac_gt30": {
+    "mean": 0.5284,
+    "sd": 0.1687
+   },
+   "frac_gt45": {
+    "mean": 0.0933,
+    "sd": 0.0915
+   },
+   "upland_flat": {
+    "mean": 0.0682,
+    "sd": 0.0831
+   },
+   "fine_coarse": {
+    "mean": 0.3462,
+    "sd": 0.0449
+   },
+   "mid_broad": {
+    "mean": 0.3653,
+    "sd": 0.1003
+   },
+   "gully_per_km": {
+    "mean": 1.7994,
+    "sd": 0.2746
+   },
+   "crest_curv": {
+    "mean": 12.9018,
+    "sd": 3.985
+   }
+  }
+ },
+ "rockies": {
+  "windows": 2364,
+  "faces": 1182,
+  "stats": {
+   "relief_m": {
+    "mean": 445.5559,
+    "sd": 101.0573
+   },
+   "slope_mean_deg": {
+    "mean": 22.1669,
+    "sd": 4.6502
+   },
+   "slope_p90_deg": {
+    "mean": 33.666,
+    "sd": 5.7752
+   },
+   "frac_gt30": {
+    "mean": 0.2361,
+    "sd": 0.1797
+   },
+   "frac_gt45": {
+    "mean": 0.0139,
+    "sd": 0.0263
+   },
+   "upland_flat": {
+    "mean": 0.2283,
+    "sd": 0.2193
+   },
+   "fine_coarse": {
+    "mean": 0.3521,
+    "sd": 0.0507
+   },
+   "mid_broad": {
+    "mean": 0.4094,
+    "sd": 0.1151
+   },
+   "gully_per_km": {
+    "mean": 1.7966,
+    "sd": 0.2872
+   },
+   "crest_curv": {
+    "mean": 9.2275,
+    "sd": 3.3981
+   }
+  }
+ },
+ "andes": {
+  "windows": 2396,
+  "faces": 1198,
+  "stats": {
+   "relief_m": {
+    "mean": 729.1563,
+    "sd": 148.2897
+   },
+   "slope_mean_deg": {
+    "mean": 31.0519,
+    "sd": 4.2442
+   },
+   "slope_p90_deg": {
+    "mean": 41.934,
+    "sd": 5.5603
+   },
+   "frac_gt30": {
+    "mean": 0.5924,
+    "sd": 0.1794
+   },
+   "frac_gt45": {
+    "mean": 0.0735,
+    "sd": 0.092
+   },
+   "upland_flat": {
+    "mean": 0.0541,
+    "sd": 0.0927
+   },
+   "fine_coarse": {
+    "mean": 0.3465,
+    "sd": 0.044
+   },
+   "mid_broad": {
+    "mean": 0.3464,
+    "sd": 0.0861
+   },
+   "gully_per_km": {
+    "mean": 1.8124,
+    "sd": 0.2862
+   },
+   "crest_curv": {
+    "mean": 12.5183,
+    "sd": 2.9278
+   }
+  }
+ },
+ "himalayas": {
+  "windows": 2393,
+  "faces": 1197,
+  "stats": {
+   "relief_m": {
+    "mean": 886.0876,
+    "sd": 212.7135
+   },
+   "slope_mean_deg": {
+    "mean": 35.5728,
+    "sd": 5.1461
+   },
+   "slope_p90_deg": {
+    "mean": 49.6826,
+    "sd": 6.5368
+   },
+   "frac_gt30": {
+    "mean": 0.6941,
+    "sd": 0.1563
+   },
+   "frac_gt45": {
+    "mean": 0.2239,
+    "sd": 0.1621
+   },
+   "upland_flat": {
+    "mean": 0.0421,
+    "sd": 0.0632
+   },
+   "fine_coarse": {
+    "mean": 0.3429,
+    "sd": 0.0412
+   },
+   "mid_broad": {
+    "mean": 0.3689,
+    "sd": 0.096
+   },
+   "gully_per_km": {
+    "mean": 1.8042,
+    "sd": 0.2782
+   },
+   "crest_curv": {
+    "mean": 15.2697,
+    "sd": 4.5667
+   }
+  }
+ },
+ "cascades": {
+  "windows": 2373,
+  "faces": 1187,
+  "stats": {
+   "relief_m": {
+    "mean": 641.9389,
+    "sd": 141.1821
+   },
+   "slope_mean_deg": {
+    "mean": 29.5532,
+    "sd": 4.5461
+   },
+   "slope_p90_deg": {
+    "mean": 41.6591,
+    "sd": 5.4479
+   },
+   "frac_gt30": {
+    "mean": 0.5094,
+    "sd": 0.1782
+   },
+   "frac_gt45": {
+    "mean": 0.0705,
+    "sd": 0.0803
+   },
+   "upland_flat": {
+    "mean": 0.068,
+    "sd": 0.0912
+   },
+   "fine_coarse": {
+    "mean": 0.3446,
+    "sd": 0.0466
+   },
+   "mid_broad": {
+    "mean": 0.3872,
+    "sd": 0.1118
+   },
+   "gully_per_km": {
+    "mean": 1.7523,
+    "sd": 0.279
+   },
+   "crest_curv": {
+    "mean": 12.3445,
+    "sd": 4.03
+   }
+  }
+ },
+ "coast": {
+  "windows": 2297,
+  "faces": 1149,
+  "stats": {
+   "relief_m": {
+    "mean": 772.1099,
+    "sd": 146.9325
+   },
+   "slope_mean_deg": {
+    "mean": 31.5779,
+    "sd": 4.6902
+   },
+   "slope_p90_deg": {
+    "mean": 44.8769,
+    "sd": 5.9804
+   },
+   "frac_gt30": {
+    "mean": 0.5688,
+    "sd": 0.1747
+   },
+   "frac_gt45": {
+    "mean": 0.123,
+    "sd": 0.1078
+   },
+   "upland_flat": {
+    "mean": 0.0646,
+    "sd": 0.0919
+   },
+   "fine_coarse": {
+    "mean": 0.3286,
+    "sd": 0.0403
+   },
+   "mid_broad": {
+    "mean": 0.3476,
+    "sd": 0.0938
+   },
+   "gully_per_km": {
+    "mean": 1.6976,
+    "sd": 0.274
+   },
+   "crest_curv": {
+    "mean": 12.3447,
+    "sd": 3.834
+   }
+  }
+ },
+ "sierra": {
+  "windows": 2342,
+  "faces": 1171,
+  "stats": {
+   "relief_m": {
+    "mean": 535.6188,
+    "sd": 141.484
+   },
+   "slope_mean_deg": {
+    "mean": 25.8632,
+    "sd": 5.1978
+   },
+   "slope_p90_deg": {
+    "mean": 38.9445,
+    "sd": 6.7839
+   },
+   "frac_gt30": {
+    "mean": 0.3665,
+    "sd": 0.1992
+   },
+   "frac_gt45": {
+    "mean": 0.0541,
+    "sd": 0.0723
+   },
+   "upland_flat": {
+    "mean": 0.1353,
+    "sd": 0.164
+   },
+   "fine_coarse": {
+    "mean": 0.3638,
+    "sd": 0.0592
+   },
+   "mid_broad": {
+    "mean": 0.426,
+    "sd": 0.1324
+   },
+   "gully_per_km": {
+    "mean": 1.8257,
+    "sd": 0.3185
+   },
+   "crest_curv": {
+    "mean": 12.3958,
+    "sd": 4.6737
+   }
+  }
+ },
+ "appalachians": {
+  "windows": 2395,
+  "faces": 1198,
+  "stats": {
+   "relief_m": {
+    "mean": 353.2687,
+    "sd": 67.8835
+   },
+   "slope_mean_deg": {
+    "mean": 20.933,
+    "sd": 3.0626
+   },
+   "slope_p90_deg": {
+    "mean": 29.7914,
+    "sd": 3.3659
+   },
+   "frac_gt30": {
+    "mean": 0.1194,
+    "sd": 0.0968
+   },
+   "frac_gt45": {
+    "mean": 0.0008,
+    "sd": 0.0044
+   },
+   "upland_flat": {
+    "mean": 0.1829,
+    "sd": 0.139
+   },
+   "fine_coarse": {
+    "mean": 0.4018,
+    "sd": 0.0641
+   },
+   "mid_broad": {
+    "mean": 0.4638,
+    "sd": 0.115
+   },
+   "gully_per_km": {
+    "mean": 2.0492,
+    "sd": 0.3244
+   },
+   "crest_curv": {
+    "mean": 8.5749,
+    "sd": 1.7285
+   }
+  }
+ },
+ "japan_alps": {
+  "windows": 2358,
+  "faces": 1179,
+  "stats": {
+   "relief_m": {
+    "mean": 632.1859,
+    "sd": 113.6205
+   },
+   "slope_mean_deg": {
+    "mean": 32.726,
+    "sd": 3.8966
+   },
+   "slope_p90_deg": {
+    "mean": 42.3803,
+    "sd": 4.0032
+   },
+   "frac_gt30": {
+    "mean": 0.6744,
+    "sd": 0.1622
+   },
+   "frac_gt45": {
+    "mean": 0.0668,
+    "sd": 0.0753
+   },
+   "upland_flat": {
+    "mean": 0.0551,
+    "sd": 0.0803
+   },
+   "fine_coarse": {
+    "mean": 0.3949,
+    "sd": 0.0534
+   },
+   "mid_broad": {
+    "mean": 0.427,
+    "sd": 0.1034
+   },
+   "gully_per_km": {
+    "mean": 2.0539,
+    "sd": 0.2395
+   },
+   "crest_curv": {
+    "mean": 13.4492,
+    "sd": 2.3396
+   }
+  }
+ },
+ "hokkaido": {
+  "windows": 2373,
+  "faces": 1187,
+  "stats": {
+   "relief_m": {
+    "mean": 339.534,
+    "sd": 93.1208
+   },
+   "slope_mean_deg": {
+    "mean": 19.9505,
+    "sd": 4.9254
+   },
+   "slope_p90_deg": {
+    "mean": 30.8645,
+    "sd": 5.5866
+   },
+   "frac_gt30": {
+    "mean": 0.1695,
+    "sd": 0.1702
+   },
+   "frac_gt45": {
+    "mean": 0.0071,
+    "sd": 0.0222
+   },
+   "upland_flat": {
+    "mean": 0.3707,
+    "sd": 0.2545
+   },
+   "fine_coarse": {
+    "mean": 0.4346,
+    "sd": 0.0803
+   },
+   "mid_broad": {
+    "mean": 0.4624,
+    "sd": 0.1326
+   },
+   "gully_per_km": {
+    "mean": 2.1281,
+    "sd": 0.3424
+   },
+   "crest_curv": {
+    "mean": 8.9733,
+    "sd": 2.6423
+   }
+  }
+ }
+}

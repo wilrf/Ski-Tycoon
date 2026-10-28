@@ -1,0 +1,6 @@
+{
+  // Tests run in Node, so they get Node's types; the game itself stays browser-only.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["vite/client", "node"] },
+  "include": [".", "../src"]
+}
