@@ -51,7 +51,7 @@ const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
 const linked = await linkedSite(params);
 if (linked && 'error' in linked) toast(linked.error, 6);
-const makeSite = linked && 'make' in linked ? linked.make : null;
+let makeSite = linked && 'make' in linked ? linked.make : null;
 const newWorld = (seed: number): World => (makeSite ? createWorld(seed, makeSite(seed)) : createWorld(seed));
 const randomSeed = (): number => Date.now() % 1e9;
 const fresh = seedParam !== null || makeSite !== null;
@@ -105,7 +105,9 @@ function menu(command: MenuCommand): void {
     if (loaded) startWorld(loaded);
     return toast(loaded ? 'Save loaded.' : 'No saved game yet.');
   }
-  if (window.confirm('Start a new mountain? Anything since your last save will be lost.')) newMountain(true);
+  if (!window.confirm('Start a new mountain? Anything since your last save will be lost.')) return;
+  openMenu();
+  menus.showMountains((link) => void pickMountain(link));
 }
 
 // A new mountain waits for P, so there's time to look around and plan the first lift.
@@ -113,6 +115,15 @@ function newMountain(fresh: boolean): void {
   if (fresh) startWorld(newWorld(randomSeed()));
   speedIndex = speedBeforeMenu = 0;
   toast('Your mountain is paused. Press P (or ▶) to start the day.', 6);
+}
+
+// A picked range or peak becomes the site for this and later new mountains, as a ?range= or ?peak= link would.
+async function pickMountain(link: URLSearchParams): Promise<void> {
+  const picked = await linkedSite(link);
+  if (picked && 'error' in picked) return toast(picked.error, 6);
+  makeSite = picked ? picked.make : null;
+  newMountain(true);
+  closeMenu();
 }
 
 // The game is paused while the start screen or pause menu is up.
@@ -136,8 +147,7 @@ function choose(choice: MenuChoice): void {
       // A fresh, untouched mountain is already new; anything else asks first.
       const untouched = world.calendar.day === 1 && activeResort(world).lifts.length === 0;
       if (!untouched && !window.confirm('Start a new mountain? Anything since your last save will be lost.')) return;
-      newMountain(!untouched);
-      return closeMenu();
+      return menus.showMountains((link) => void pickMountain(link));
     }
     case 'help': return;
   }

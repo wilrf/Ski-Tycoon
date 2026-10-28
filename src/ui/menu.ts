@@ -2,6 +2,8 @@ import './menu.css';
 import { CONFIG } from '../config';
 import { income } from '../sim/economy';
 import { GRIPES, PRAISE, topFeelings, worstPlace } from '../sim/progress';
+import { PEAKS } from '../data/peaks';
+import { RANGE_KEYS, RANGE_NAMES } from '../sim/ranges';
 import type { FeelingKind } from '../sim/skiers';
 import type { DayReport } from '../sim/world';
 import type { Fix, FixTarget } from './fixes';
@@ -37,6 +39,7 @@ export interface ReportHandlers {
 export function createMenus(onChoice: (choice: MenuChoice) => void, handlers: ReportHandlers): {
   showStart(hasSave: boolean): void;
   showPause(): void;
+  showMountains(pick: (link: URLSearchParams) => void): void;
   hide(): void;
   isOpen(): boolean;
   showReport(report: DayReport): void;
@@ -84,6 +87,28 @@ export function createMenus(onChoice: (choice: MenuChoice) => void, handlers: Re
         ['new', 'New mountain', !hasSave],
         ['help', 'How to play'],
       ]);
+    },
+    // Every range and real peak, grouped by range. A range button builds a new mountain in its character;
+    // a peak button loads the real one. The picks are the same ?range= and ?peak= links a URL can carry.
+    showMountains(pick) {
+      screen.replaceChildren();
+      const card = screen.appendChild(el('div', 'menu-card mountain-picker'));
+      card.appendChild(el('h1', '', 'Pick a mountain'));
+      card.appendChild(el('p', 'tagline', 'A made-up mountain in a real range’s character, or a real peak at its true shape.'));
+      const button = (parent: HTMLElement, label: string, link: string, cls = ''): void => {
+        const b = parent.appendChild(el('button', cls, label));
+        b.addEventListener('click', () => pick(new URLSearchParams(link)));
+      };
+      button(card.appendChild(el('div', 'menu-buttons')), 'Classic mountain', '', 'primary');
+      for (const range of RANGE_KEYS) {
+        const group = card.appendChild(el('section', 'range-group'));
+        group.appendChild(el('h3', '', RANGE_NAMES[range]));
+        const row = group.appendChild(el('div', 'range-row'));
+        button(row, 'New mountain', `range=${range}`, 'generated');
+        for (const peak of PEAKS.filter((p) => p.range === range)) button(row, peak.name, `peak=${peak.id}`);
+      }
+      screen.hidden = false;
+      screen.scrollTop = 0;
     },
     showPause() {
       render('Paused', 'The mountain waits for you.', [['resume', 'Resume', true], ['save', 'Save'], ['load', 'Load'], ['new', 'New mountain'], ['help', 'How to play']]);

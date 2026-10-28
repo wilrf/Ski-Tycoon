@@ -71,3 +71,9 @@ button.stat.rating { min-height: 28px; padding: 2px 10px; color: var(--accent); 
 #panel .slider span { grid-column: 1 / -1; color: var(--muted); }
 #panel .slider input[type='range'] { width: 100%; accent-color: var(--accent); min-height: 28px; }
 #panel .slider input[type='number'] { width: 64px; min-height: 34px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); color: var(--ink); font: inherit; font-weight: 800; text-align: right; }
+.mountain-picker { width: min(760px, 100%); }
+.range-group { margin-top: 16px; text-align: left; }
+.range-group h3 { margin: 0 0 6px; color: var(--accent); font-size: 15px; }
+.range-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.range-row button { min-height: 40px; font-size: 14px; }
+.range-row button.generated { font-style: italic; }
