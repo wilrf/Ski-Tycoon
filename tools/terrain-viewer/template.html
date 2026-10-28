@@ -186,13 +186,15 @@ function surface(z, w, h, cell, treeline) {
   return { z, w, h, cell, lo, hi, treeline: treeline ?? Infinity };
 }
 
-// Smooth noise in [0, 1] with a lattice `k` cells wide: clumps of forest rather than speckle.
-function clumps(x, y, k) {
+// Smooth noise in [0, 1] with a lattice `k` cells wide.
+function smoothNoise(x, y, k) {
   const hash = (a, b) => { let t = Math.imul(a, 374761393) ^ Math.imul(b, 668265263); t = Math.imul(t ^ (t >>> 13), 1274126177); return ((t ^ (t >>> 16)) >>> 0) / 4294967296; };
   const gx = x / k, gy = y / k, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
   const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
   return (hash(x0, y0) * (1 - sx) + hash(x0 + 1, y0) * sx) * (1 - sy) + (hash(x0, y0 + 1) * (1 - sx) + hash(x0 + 1, y0 + 1) * sx) * sy;
 }
+// Two scales mixed, so forest edges and clearings wander instead of following the lattice.
+const clumps = (x, y, k) => 0.6 * smoothNoise(x, y, k) + 0.4 * smoothNoise(x + 101.3, y - 57.7, k * 0.43);
 
 const css = () => getComputedStyle(document.documentElement);
 const hex = (s) => { const c = s.trim().replace('#', ''); return [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16) / 255); };
@@ -203,12 +205,12 @@ const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
    tree line, thinning over its last 300 m. */
 function colourAt(s, i, slopeDeg, mode, clay) {
   if (mode === 'clay') return clay;
-  const snow = [0.93, 0.95, 0.97], rock = [0.42, 0.41, 0.4], forest = [0.16, 0.27, 0.2];
+  const snow = [0.93, 0.95, 0.97], rock = [0.56, 0.54, 0.51], forest = [0.16, 0.27, 0.2];
   let c = mix(snow, rock, Math.min(1, Math.max(0, (slopeDeg - 35) / 10)));
   const below = s.treeline - s.z[i];
   if (below > 0 && slopeDeg < 42) {
     const density = Math.min(1, below / 300), x = i % s.w, y = (i - x) / s.w;
-    if (clumps(x, y, 6 * 30 / s.cell) < 0.25 + 0.55 * density) c = mix(c, forest, 0.85);
+    if (clumps(x, y, 7 * 30 / s.cell) < 0.3 + 0.45 * density) c = mix(c, forest, 0.85);
   }
   return c;
 }
