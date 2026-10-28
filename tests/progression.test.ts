@@ -196,6 +196,16 @@ describe('reviews and requests', () => {
 });
 
 describe('save upgrade', () => {
+  it('keeps a version 4 lift on the same model after the platter and triple chair were added', () => {
+    const world = builtWorld();
+    const lift = activeResort(world).lifts[0]!;
+    lift.tier = 2;
+    const loaded = deserialize(JSON.stringify({ version: 4, savedAt: '', world }));
+    if (!loaded.ok) throw new Error(loaded.error);
+    const tier = activeResort(loaded.world).lifts[0]!.tier;
+    expect(CONFIG.liftTiers.chairlift[tier]!.name).toBe('High-speed quad');
+  });
+
   it('loads a version 1 save, keeping what was built', () => {
     const world = builtWorld();
     const resort = activeResort(world);
@@ -209,7 +219,7 @@ describe('save upgrade', () => {
       }],
     };
     const loaded = deserialize(JSON.stringify({ version: 1, savedAt: '', world: v1 }));
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5);
     if (!loaded.ok) throw new Error(loaded.error);
     expect(activeResort(loaded.world).lifts[0]!.tier).toBe(0);
     expect(activeResort(loaded.world).runs).toHaveLength(1);
