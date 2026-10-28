@@ -5,17 +5,17 @@ import { clamp, dist, lerp, pointAlong, polylineLength, vec, type Vec2 } from '.
 import { liftSpeed, rideSeconds, type Lift } from '../sim/lifts';
 import { profileRun, snowOf, type Run } from '../sim/runs';
 import type { Skier } from '../sim/skiers';
-import { terrainExtent } from '../sim/terrain';
 import { activeResort, type World } from '../sim/world';
 import { pendingLiftPlan, pendingRunPoints, type UiState } from '../ui/tools';
-import { toScreen, toWorld, type Camera, type View } from './camera';
+import { SIN, toScreen, visibleBounds, type Camera, type View } from './camera';
+import { drawTilted, SUNRISE } from './tilt';
 import { INVALID, LEVEL_COLORS, LIFT_COLORS, SELECTED, skillJacket } from './colors';
 import { drawRun as paintRun, type RunView } from './runArt';
 import { baseSpeed, cableGap, drawCarriers, drawCorral, queueSlots, type CarrierView, type Rider } from './liftArt';
 import { drawFeature } from './featureArt';
 import { airborne, drawPuffs, drawTrail, stampSkier, type Pose } from './skierArt';
 import { skiingPose, snowPuffs, trailPoses, type Stance } from './skierMotion';
-import { stampPine, type TerrainArt } from './terrainArt';
+import type { TerrainArt } from './terrainArt';
 
 export interface Frame {
   readonly world: World;
@@ -32,7 +32,6 @@ export interface Frame {
 
 const TOWER_SPACING = 70;
 const UI_FONT = '"Nunito", system-ui, sans-serif';
-const VECTOR_TREE_ZOOM = 1.2;
 /** Snow spray is too small to see below this zoom, so it isn't worked out at all. */
 const SPRAY_ZOOM = 1.2;
 /** Trails are drawn for at most this many skiers, those nearest the middle of the screen. */
@@ -54,12 +53,7 @@ function painter(ctx: CanvasRenderingContext2D, camera: Camera, view: View) {
     ctx.stroke();
     ctx.setLineDash([]);
   };
-  const runView: RunView = {
-    zoom: camera.zoom,
-    at,
-    min: toWorld(camera, view, vec(0, 0)),
-    max: toWorld(camera, view, vec(view.width, view.height)),
-  };
+  const runView: RunView = { zoom: camera.zoom, at, ...visibleBounds(camera, view) };
   const drawRun = (points: readonly Vec2[], level: Level, outline: string | null, wear = 0): void =>
     paintRun(ctx, points, level, outline, runView, wear);
 
@@ -121,23 +115,9 @@ const isSelected = (ui: UiState, kind: 'lift' | 'run' | 'skier', id: number): bo
 function drawStill(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { world, ui, camera, view } = f;
   const resort = activeResort(world);
-  const { at, drawRun, liftStructure } = painter(ctx, camera, view);
+  const { drawRun, liftStructure } = painter(ctx, camera, view);
 
-  const origin = at(vec(0, 0));
-  const size = terrainExtent(resort.terrain) * camera.zoom;
-  // A soft drop shadow from stacked translucent rings: shadowBlur on an image this big halves the frame rate.
-  ctx.fillStyle = 'rgba(10, 20, 50, 0.035)';
-  for (let r = 2; r <= 28; r += 2) ctx.fillRect(origin.x - r, origin.y - r + 6, size + r * 2, size + r * 2);
-  // Close up, the baked trees would blur, so draw the visible ones as vectors over the bare ground.
-  const vectorTrees = camera.zoom >= VECTOR_TREE_ZOOM;
-  ctx.drawImage(vectorTrees ? f.terrain.ground : f.terrain.withTrees, origin.x, origin.y, size, size);
-  if (vectorTrees) {
-    const min = toWorld(camera, view, vec(-20, -20)), max = toWorld(camera, view, vec(view.width + 20, view.height + 20));
-    const dpr = ctx.getTransform().a;
-    for (const tree of f.terrain.trees) {
-      if (tree.x > min.x && tree.x < max.x && tree.y > min.y && tree.y < max.y) stampPine(ctx, tree, at(tree), camera.zoom, dpr);
-    }
-  }
+  drawTilted(ctx, f.terrain.tilted, camera, view);
 
   ctx.lineCap = ctx.lineJoin = 'round';
   for (const run of resort.runs) drawRun(run.points, run.profile.difficulty, isSelected(ui, 'run', run.id) ? SELECTED : null, runWear(run));
@@ -227,10 +207,10 @@ function updateStill(ctx: CanvasRenderingContext2D, f: Frame): Still {
 
   // Shift by whole device pixels so the copied picture never blurs; the leftover fraction is applied when pasting.
   const scale = camera.zoom * dpr;
-  const sx = Math.round((still.x - camera.x) * scale), sy = Math.round((still.y - camera.y) * scale);
+  const sx = Math.round((still.x - camera.x) * scale), sy = Math.round((still.y - camera.y) * scale * SIN);
   if (sx === 0 && sy === 0) return still;
   const { canvas, spare } = still;
-  const at = { x: still.x - sx / scale, y: still.y - sy / scale, zoom: camera.zoom };
+  const at = { x: still.x - sx / scale, y: still.y - sy / (scale * SIN), zoom: camera.zoom };
   if (Math.abs(sx) >= canvas.width || Math.abs(sy) >= canvas.height) {
     canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
     paint(canvas, at);
@@ -257,18 +237,14 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
   const { at, px, stroke, drawRun, liftStructure } = painter(ctx, camera, view);
   const time = world.calendar.time + f.alpha * CONFIG.loop.gameSecondsPerTick;
 
-  const sky = ctx.createLinearGradient(0, 0, 0, view.height);
-  sky.addColorStop(0, '#2b4c7e');
-  sky.addColorStop(1, '#8fb3d9');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, view.width, view.height);
+  drawSky(ctx, f);
   noteSkiers(world);
   const layer = updateStill(ctx, f);
   // The layer is at device pixels, so paste it with the canvas's scale undone.
   const dpr = ctx.getTransform().a;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(layer.canvas, (layer.x - camera.x) * camera.zoom * dpr, (layer.y - camera.y) * camera.zoom * dpr);
+  ctx.drawImage(layer.canvas, (layer.x - camera.x) * camera.zoom * dpr, (layer.y - camera.y) * SIN * camera.zoom * dpr);
   ctx.restore();
 
   ctx.lineCap = ctx.lineJoin = 'round';
@@ -365,6 +341,9 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
     for (const id of headings.keys()) if (!here.has(id)) headings.delete(id);
   }
 
+  // Until the first lift goes in, a card names the mountain, like the sign at the foot of a real one.
+  if (world.calendar.day === 1 && resort.lifts.length === 0) nameCard(ctx, resort.name, Math.max(...resort.terrain.heights));
+
   // Trail-map labels once zoomed in far enough to read them.
   if (camera.zoom > 0.45) {
     for (const run of resort.runs) {
@@ -377,6 +356,47 @@ export function draw(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const headings = new Map<number, number>();
+
+/**
+ * A sunrise sky: deep blue overhead paling to peach at the skyline, the sun's glow low in the east, and a few
+ * streaks of lit cloud. It sits behind the far ranges baked into the mountain picture.
+ */
+function drawSky(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const { camera, view } = f;
+  const horizon = (f.terrain.tilted.horizon - camera.y * SIN) * camera.zoom + view.height / 2;
+  const bottom = Math.max(80, horizon);
+  const sky = ctx.createLinearGradient(0, 0, 0, bottom);
+  SUNRISE.sky.forEach((c, i) => sky.addColorStop(i / (SUNRISE.sky.length - 1), c));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, view.width, view.height);
+  // Below the horizon lies the sea of cloud the mountain rises from, past the edge of the painted land too.
+  const sea = ctx.createLinearGradient(0, bottom, 0, view.height);
+  sea.addColorStop(0, '#ffe9dc');
+  sea.addColorStop(0.35, SUNRISE.cloud);
+  sea.addColorStop(1, '#e4d3e2');
+  ctx.fillStyle = sea;
+  ctx.fillRect(0, bottom, view.width, view.height - bottom);
+  const sx = view.width * 0.86, sy = bottom - 60;
+  const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, view.width * 0.5);
+  glow.addColorStop(0, 'rgba(255, 224, 168, 0.95)');
+  glow.addColorStop(0.08, 'rgba(255, 224, 168, 0.6)');
+  glow.addColorStop(0.4, 'rgba(255, 224, 168, 0.18)');
+  glow.addColorStop(1, 'rgba(255, 224, 168, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, view.width, view.height);
+  // Cloud streaks hang at fixed places over the skyline, so they drift past as the camera pans.
+  const drift = -camera.x * camera.zoom * 0.3;
+  for (let i = 0; i < 5; i++) {
+    const w = view.width * (0.16 + 0.05 * (i % 3)), x = ((view.width * (0.1 + 0.21 * i) + drift) % (view.width * 1.2) + view.width * 1.2) % (view.width * 1.2) - view.width * 0.1;
+    const y = bottom - 150 - (i % 2) * 70 - (i % 3) * 25;
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = k === 0 ? 'rgba(255, 210, 166, 0.85)' : 'rgba(190, 170, 205, 0.7)';
+      ctx.beginPath();
+      ctx.roundRect(x + k * w * 0.12, y + k * 7, w * (1 - k * 0.25), 6, 3);
+      ctx.fill();
+    }
+  }
+}
 
 const stancePose = (stance: Stance): Pose => (stance === 'parallel' ? 'skis' : stance);
 
@@ -419,6 +439,23 @@ export function difficultySymbol(ctx: CanvasRenderingContext2D, c: Vec2, level: 
   }
   if (level === 2) diamond(c.x);
   if (level === 3) [-r * 0.9, r * 0.9].forEach((dx) => diamond(c.x + dx));
+}
+
+function nameCard(ctx: CanvasRenderingContext2D, name: string, summit: number): void {
+  // Generated mountains have no real elevation, so only real peaks state their summit.
+  const detail = summit > 1500 ? `Summit ${Math.round(summit).toLocaleString('en-US')} m · first morning` : 'First morning';
+  ctx.font = `900 26px ${UI_FONT}`;
+  const w = Math.max(ctx.measureText(name).width, (ctx.font = `700 13px ${UI_FONT}`, ctx.measureText(detail).width)) + 36;
+  ctx.fillStyle = 'rgba(16, 28, 56, 0.62)';
+  ctx.beginPath();
+  ctx.roundRect(16, 76, w, 66, 14);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `900 26px ${UI_FONT}`;
+  ctx.fillText(name, 34, 108);
+  ctx.fillStyle = '#ffd27a';
+  ctx.font = `700 13px ${UI_FONT}`;
+  ctx.fillText(detail, 34, 130);
 }
 
 function mapLabel(ctx: CanvasRenderingContext2D, p: Vec2, text: string, italic = false): void {

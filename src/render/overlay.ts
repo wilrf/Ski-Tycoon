@@ -7,6 +7,7 @@ import { cellGrade, terrainExtent, type Terrain } from '../sim/terrain';
 import { activeResort, buildingProblemsHere, heldLifts, runStartAt } from '../sim/world';
 import { money } from '../ui/format';
 import { toScreen } from './camera';
+import { drawTilted, tiltImage, type Tilted } from './tilt';
 import type { Frame } from './renderer';
 
 /**
@@ -18,12 +19,11 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
   const resort = activeResort(world);
   const at = (p: Vec2): Vec2 => toScreen(camera, view, p);
   const extent = terrainExtent(resort.terrain);
-  const origin = at(vec(0, 0));
 
   if (ui.tool.kind === 'run') {
     ctx.globalAlpha = 0.33;
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(slopeGuide(resort.terrain), origin.x, origin.y, extent * camera.zoom, extent * camera.zoom);
+    drawTilted(ctx, slopeGuide(resort.terrain), camera, view);
     ctx.globalAlpha = 1;
     // Before the first point, ring every lift top a run can start from, and show where a press would snap.
     if (ui.tool.points.length === 0) {
@@ -36,20 +36,25 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
   // Land that isn't bought yet is under cloud, with what it costs to open it up.
   const edge = landEdge(resort);
   if (edge > 0) {
-    const bottom = at(vec(0, edge)).y;
-    const fog = ctx.createLinearGradient(0, bottom - 60, 0, bottom);
-    fog.addColorStop(0, 'rgba(225, 232, 245, 0.78)');
-    fog.addColorStop(1, 'rgba(225, 232, 245, 0.35)');
-    ctx.fillStyle = fog;
-    ctx.fillRect(origin.x, origin.y, extent * camera.zoom, bottom - origin.y);
-    ctx.setLineDash([10, 8]);
-    ctx.strokeStyle = 'rgba(23, 35, 61, 0.7)';
-    ctx.lineWidth = 2;
+    // The edge follows the ground, so on the tilted map it rises and dips over the ridges it crosses.
+    const line = Array.from({ length: 65 }, (_, i) => at(vec((extent * i) / 64, edge)));
+    const bottom = Math.max(...line.map((p) => p.y)), reach = Math.max(120, view.height * 0.2);
+    // Land not yet bought sits in a soft cloud shadow that fades out toward the summit, so the peak stays clear.
+    const shade = ctx.createLinearGradient(0, bottom, 0, bottom - reach);
+    shade.addColorStop(0, 'rgba(60, 76, 130, 0.2)');
+    shade.addColorStop(1, 'rgba(60, 76, 130, 0)');
+    ctx.fillStyle = shade;
     ctx.beginPath();
-    ctx.moveTo(origin.x, bottom);
-    ctx.lineTo(origin.x + extent * camera.zoom, bottom);
+    ctx.moveTo(line[0]!.x, bottom - reach);
+    for (const p of line) ctx.lineTo(p.x, p.y);
+    ctx.lineTo(line[line.length - 1]!.x, bottom - reach);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.stroke();
-    ctx.setLineDash([]);
     const next = CONFIG.land[resort.land]!;
     // Just above the edge, unless that's under the HUD; then just below it.
     pill(ctx, vec(view.width / 2, bottom > 190 ? bottom - 20 : bottom + 20), `🔒 ${next.name} · ${next.stars}★ · ${money(next.cost)}`);
@@ -87,10 +92,10 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 const GUIDE_COLORS = ['rgba(31, 157, 85, 1)', 'rgba(29, 111, 224, 1)', 'rgba(21, 24, 29, 1)', 'rgba(214, 40, 40, 1)'];
-const guides = new WeakMap<Terrain, HTMLCanvasElement>();
+const guides = new WeakMap<Terrain, Tilted>();
 
 /** Each terrain cell tinted by the run colour its slope would give, so runs can be aimed at a difficulty. */
-function slopeGuide(t: Terrain): HTMLCanvasElement {
+function slopeGuide(t: Terrain): Tilted {
   const cached = guides.get(t);
   if (cached) return cached;
   const canvas = document.createElement('canvas');
@@ -100,8 +105,9 @@ function slopeGuide(t: Terrain): HTMLCanvasElement {
     g.fillStyle = GUIDE_COLORS[gradeToDifficulty(cellGrade(t, cx, cy))]!;
     g.fillRect(cx, cy, 1, 1);
   }
-  guides.set(t, canvas);
-  return canvas;
+  const tilted = tiltImage(canvas, t, { pad: 0, shaded: false });
+  guides.set(t, tilted);
+  return tilted;
 }
 
 function building(ctx: CanvasRenderingContext2D, p: Vec2, type: BuildingType, name: string, zoom: number, selected: boolean): void {

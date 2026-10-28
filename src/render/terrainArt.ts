@@ -2,7 +2,7 @@ import { CONFIG } from '../config';
 import { vec, type Vec2 } from '../sim/geometry';
 import { heightAt, TerrainType, terrainExtent, type Terrain } from '../sim/terrain';
 import type { Resort } from '../sim/world';
-import { scaleBucket, sprite } from './sprites';
+import { tiltImage, type Tilted } from './tilt';
 
 const PIXELS_PER_CELL = 8;
 const CONTOUR_INTERVAL = 20;
@@ -44,12 +44,13 @@ export interface Tree {
   readonly height: number;
 }
 
-/** The baked mountain: ground alone for close zoom (trees are then drawn as vectors), and ground with trees. */
+/** The baked mountain: the ground seen from above, where its trees stand, and the tilted view of both. */
 export interface TerrainArt {
   readonly ground: HTMLCanvasElement;
-  readonly withTrees: HTMLCanvasElement;
   /** Sorted north to south, so drawing in order overlaps correctly. */
   readonly trees: readonly Tree[];
+  /** The mountain as the tilted camera sees it, with standing trees and far ranges on the skyline. */
+  readonly tilted: Tilted;
 }
 
 /**
@@ -69,11 +70,7 @@ export function bakeTerrain({ terrain: t, entrance }: Pick<Resort, 'terrain' | '
   ctx.scale(scale, scale);
   drawBase(ctx, entrance);
   const trees = plantTrees(t, entrance);
-  const [withTrees, treeCtx] = canvas();
-  treeCtx.drawImage(ground, 0, 0);
-  treeCtx.scale(scale, scale);
-  for (const tree of trees) pine(treeCtx, tree);
-  return { ground, withTrees, trees };
+  return { ground, trees, tilted: tiltImage(ground, t, { pad: terrainExtent(t) * 0.4, shaded: true, trees }) };
 }
 
 /** Smooth noise in [0, 1] on a lattice `cell` pixels wide, built from the hash so it needs no state. */
@@ -117,12 +114,14 @@ function paintGround(ctx: CanvasRenderingContext2D, t: Terrain, n: number): void
       });
       color = mix(color, SNOW.shadow, Math.min(0.35, Math.max(0, curvature * 0.9)));
       // Rock shows where this pixel's own slope is too steep to hold snow; noise roughens the edges.
-      const steep = Math.hypot(...fine) + (smoothNoise(x, y, 14, 2) - 0.5) * 0.3;
-      const rock = Math.min(1, Math.max(0, (steep - CONFIG.terrain.rockGrade) / 0.08));
+      // Steepness over a few cells, not single pixels, so real-world heightmap noise doesn't speckle the rock.
+      const steep = Math.hypot(fine[0] * 0.35 + broad[0] * 0.65, fine[1] * 0.35 + broad[1] * 0.65) + (smoothNoise(x, y * 0.25, 9, 2) - 0.5) * 0.22;
+      // Rock fades in over a band of steepness, streaked down the fall line the way snow sheds off real faces.
+      const rock = Math.min(1, Math.max(0, (steep - CONFIG.terrain.rockGrade) / 0.3));
       if (rock > 0) {
-        const rockShade = Math.min(1, lambert(fine) * 1.1 + (smoothNoise(x, y, 5, 4) - 0.5) * 0.35);
+        const rockShade = Math.min(1, lambert(fine) * 1.1 + (smoothNoise(x, y, 10, 4) - 0.5) * 0.25);
         // Snow still clings to ledges in the rock.
-        const dusting = Math.max(0, smoothNoise(x, y, 7, 5) - 0.55) * 2.5;
+        const dusting = Math.max(0, smoothNoise(x, y, 12, 5) - 0.55) * 2.5;
         color = mix(color, mix(mix(ROCK.shadow, ROCK.light, rockShade), color, dusting), rock);
       }
       color = mix(color, [0, 0, 0], grain * 0.035);
@@ -155,55 +154,6 @@ function plantTrees(t: Terrain, entrance: Vec2): Tree[] {
     trees.push({ x, y, height: 8 + hash(i, 24) * 6 });
   }
   return trees.sort((a, b) => a.y - b.y);
-}
-
-/**
- * A conifer seen from above, in metres: a jagged crown lit from the north-west, a few snow-loaded
- * branches, and a long shadow cast to the south-east.
- */
-export function pine(ctx: CanvasRenderingContext2D, p: Tree, seed = Math.round(p.x * 7 + p.y * 13)): void {
-  const r = p.height * 0.3;
-  ctx.fillStyle = 'rgba(38, 52, 92, 0.3)';
-  ctx.beginPath();
-  ctx.ellipse(p.x + r * 1.3, p.y + r * 1.1, r * 1.8, r * 0.7, Math.PI / 4, 0, Math.PI * 2);
-  ctx.fill();
-  const crown = (cx: number, cy: number, radius: number, color: string): void => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2, rr = radius * (i % 2 ? 0.62 : 0.9 + hash(seed, i, 1) * 0.2);
-      ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-    }
-    ctx.fill();
-  };
-  crown(p.x, p.y, r, '#15372a');
-  crown(p.x - r * 0.15, p.y - r * 0.15, r * 0.72, '#22543d');
-  crown(p.x - r * 0.3, p.y - r * 0.3, r * 0.38, '#3a7652');
-  ctx.fillStyle = 'rgba(240, 245, 252, 0.85)';
-  for (let i = 0; i < 3; i++) {
-    const a = hash(seed, i, 2) * Math.PI * 2, d = r * (0.3 + hash(seed, i, 3) * 0.5);
-    ctx.beginPath();
-    ctx.arc(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, r * 0.13, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/** How many differently-jagged pines the sprites cycle through; more is indistinguishable. */
-const PINE_VARIANTS = 6;
-
-/**
- * Stamps a pine from a sprite drawn at about this zoom. `zoom` is pixels per metre, `dpr` the device
- * pixel ratio, and `c` the tree's position on screen.
- */
-export function stampPine(ctx: CanvasRenderingContext2D, tree: Tree, c: Vec2, zoom: number, dpr: number): void {
-  const height = Math.round(tree.height), variant = Math.round(tree.x * 7 + tree.y * 13) % PINE_VARIANTS;
-  const r = height * 0.3, before = r * 1.2, span = r * 4.4;
-  const scale = scaleBucket(zoom * dpr);
-  const image = sprite(`pine${height}:${variant}:${scale}`, span * scale, (s) => {
-    s.scale(scale, scale);
-    pine(s, { x: before, y: before, height }, variant);
-  });
-  ctx.drawImage(image, c.x - before * zoom, c.y - before * zoom, span * zoom, span * zoom);
 }
 
 /** The trampled paths from the parking lot to the two big lodges, as quadratic curves: start, bend, end. */
