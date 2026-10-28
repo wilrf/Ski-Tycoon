@@ -7,3 +7,4 @@ tools/terrain-stats/cache
 tools/terrain-stats/*.log
 tools/terrain-stats/results/*.png
 tools/terrain-stats/.venv
+tools/terrain-viewer/terrain-viewer.html

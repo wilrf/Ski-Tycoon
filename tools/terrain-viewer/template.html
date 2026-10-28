@@ -1,0 +1,472 @@
+<title>Ski Tycoon Terrain Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a survey atlas. Index of ranges and peaks down the left; the selected mountain fills the right as a
+   3D model over two plates (plan view, side elevation), with its survey facts set like a map's legend. */
+:root {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --ink: #16212b;
+  --muted: #5d6b77;
+  --rule: #d5dce2;
+  --accent: #1d6a8a;      /* glacier blue */
+  --marker: #c4542a;      /* trail-marker orange, used for the summit mark only */
+  --clay: #c8c1b6;
+  --sky: #dfe7ee;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151a; --panel: #161e25; --ink: #e3e9ee; --muted: #93a1ad; --rule: #26323c;
+    --accent: #6fb6d6; --marker: #e8794c; --clay: #9d968c; --sky: #1b2731; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151a; --panel: #161e25; --ink: #e3e9ee; --muted: #93a1ad; --rule: #26323c;
+  --accent: #6fb6d6; --marker: #e8794c; --clay: #9d968c; --sky: #1b2731; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.05; }
+.masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 18px; }
+.masthead h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: 0.01em; }
+.masthead p { margin: 0; color: var(--muted); max-width: 70ch; }
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; align-items: start; }
+.label { font-family: var(--display); text-transform: uppercase; letter-spacing: 0.09em; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+/* Index */
+.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 40px); overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.group { display: flex; flex-direction: column; gap: 2px; }
+.group .label { margin: 0 0 4px; }
+.sub { font-size: 12px; color: var(--muted); margin: 8px 0 2px 2px; font-family: var(--display); letter-spacing: 0.06em; text-transform: uppercase; }
+.item { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 4px; font-size: 14px; }
+.item:hover { background: var(--panel); }
+.item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.item[aria-current="true"] { background: var(--accent); color: var(--panel); }
+.item .num { font-family: var(--mono); font-size: 12px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+
+/* Viewer */
+.viewer { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.title-row { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 20px; }
+.title-row h2 { font-size: clamp(30px, 5vw, 48px); }
+.kind { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 4px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.seg button { all: unset; cursor: pointer; padding: 5px 11px; font-size: 13px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.exag { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.exag input { width: 110px; accent-color: var(--accent); }
+.exag output { font-family: var(--mono); font-size: 12px; min-width: 3.5ch; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.fact { background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fact .v { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.stage { position: relative; background: var(--sky); border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 10; max-width: 100%; touch-action: none; cursor: grab; }
+.stage:active { cursor: grabbing; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--panel) 80%, transparent); padding: 3px 8px; border-radius: 4px; pointer-events: none; }
+.plates { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; }
+.plate { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.plate canvas { width: 100%; height: auto; display: block; border-radius: 4px; }
+.caption { font-size: 13px; color: var(--muted); margin: 0; }
+.real { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.real figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.real canvas { width: 100%; height: auto; border-radius: 4px; display: block; }
+.real figcaption { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 22px; }
+.knob { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; }
+.knob .v { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.knob .bar { grid-column: 1 / -1; height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.knob .bar i { display: block; height: 100%; background: var(--accent); }
+.knob .why { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.note { font-size: 13px; color: var(--muted); max-width: 75ch; margin: 0; }
+
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .index { position: static; max-height: none; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
+  .group { flex: 0 0 auto; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 4px; }
+  .group .label, .sub { display: none; }
+  .item { white-space: nowrap; background: var(--panel); }
+  .plates { grid-template-columns: minmax(0, 1fr); }
+  .real { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="masthead">
+  <h1>Ski Tycoon Terrain Atlas</h1>
+  <p>Ten generated ranges, tuned against real elevation data, and the three most-viewed peaks of each range, cut from Copernicus GLO-30.</p>
+</header>
+
+<div class="layout">
+  <nav class="index" id="index" aria-label="Mountains"></nav>
+  <main class="viewer" id="viewer">
+    <div class="title-row">
+      <div>
+        <h2 id="name">Loading…</h2>
+        <div class="kind" id="kind"></div>
+      </div>
+      <div class="controls">
+        <div class="seg" id="seedSeg" role="group" aria-label="Mountain"></div>
+        <div class="seg" role="group" aria-label="Colour">
+          <button type="button" id="modeClay" aria-pressed="true">Shape</button>
+          <button type="button" id="modeTint" aria-pressed="false">Tint</button>
+        </div>
+        <label class="exag" for="exag">Height ×<input id="exag" type="range" min="1" max="2.5" step="0.1" value="1"><output id="exagOut">1.0</output></label>
+      </div>
+    </div>
+    <div class="facts" id="facts"></div>
+    <div class="stage" id="stage"><span class="hint">Drag to turn · scroll or pinch to zoom</span></div>
+    <div class="plates">
+      <section class="plate">
+        <div class="label">Plan view</div>
+        <canvas id="plan" width="480" height="480"></canvas>
+        <p class="caption" id="planCap"></p>
+      </section>
+      <section class="plate">
+        <div class="label">Side elevation, from the base</div>
+        <canvas id="side" width="900" height="420"></canvas>
+        <p class="caption" id="sideCap"></p>
+      </section>
+    </div>
+    <section class="plate" id="realPlate">
+      <div class="label">Real faces from this range</div>
+      <div class="real" id="real"></div>
+      <p class="caption">Above-median-relief windows the size of the game's face (1.6 × 1.14 km), drawn the same way. The generator was tuned so its faces match these on slope, relief, ridge sharpness, gully density and large-scale structure.</p>
+    </section>
+    <section class="plate" id="knobPlate">
+      <div class="label">Generator settings for this range</div>
+      <div class="knobs" id="knobs"></div>
+    </section>
+    <p class="note" id="tintNote">Tint colours are placeholders until the surface layer: green low down, bare rock on steep ground, snow high up. Shape mode shows the landform alone.</p>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const DATA = /*DATA*/null;
+
+const KNOBS = {
+  relief: { label: 'Relief', lo: 150, hi: 1400, unit: ' m', why: 'Summit-to-base drop of the face' },
+  profile: { label: 'Profile', lo: 0.7, hi: 2.5, why: 'Above 1 the face steepens toward the top' },
+  ridged: { label: 'Ridged', lo: 0, hi: 1, why: 'Rounded spurs at 0, knife-edge crests at 1' },
+  gain: { label: 'Roughness', lo: 0.3, hi: 0.7, why: 'Detail at 90–350 m beside the big forms' },
+  spurs: { label: 'Spurs', lo: 0.25, hi: 1, why: 'Height of the spurs and valleys erosion starts from' },
+  incision: { label: 'Incision', lo: 0.5, hi: 8, why: 'How hard water cuts the drainage network' },
+  creep: { label: 'Creep', lo: 0, hi: 0.5, why: 'Soil creep rounding crests and filling hollows' },
+  talus: { label: 'Talus', lo: 25, hi: 60, unit: '°', why: 'Steepest angle rock holds before it slides' },
+  plateau: { label: 'Plateau', lo: 0, hi: 1, why: 'Flattening of high ground into broad tops' },
+};
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const fmt = (v, d = 0) => v.toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
+
+function decode(b64, count, min) {
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const u = new Uint16Array(bytes.buffer, 0, count), out = new Float32Array(count);
+  for (let i = 0; i < count; i++) out[i] = min + u[i] / 10;
+  return out;
+}
+
+// One shape per selectable item: a square game map, or a real face window.
+function surface(z, w, h, cell) {
+  let lo = Infinity, hi = -Infinity;
+  for (const v of z) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  return { z, w, h, cell, lo, hi };
+}
+
+const css = () => getComputedStyle(document.documentElement);
+const hex = (s) => { const c = s.trim().replace('#', ''); return [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16) / 255); };
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+/* Colour of a cell: clay for shape mode; a placeholder land ramp for tint mode. */
+function colourAt(s, i, slopeDeg, mode, clay) {
+  if (mode === 'clay') return clay;
+  const t = (s.z[i] - s.lo) / Math.max(1, s.hi - s.lo);
+  const forest = [0.33, 0.45, 0.3], meadow = [0.6, 0.62, 0.45], rock = [0.55, 0.53, 0.5], snow = [0.95, 0.96, 0.97];
+  let c = t < 0.45 ? mix(forest, meadow, t / 0.45) : mix(meadow, rock, Math.min(1, (t - 0.45) / 0.3));
+  if (slopeDeg > 34) c = mix(c, rock, Math.min(1, (slopeDeg - 34) / 10));
+  if (t > 0.72 && slopeDeg < 45) c = mix(c, snow, Math.min(1, (t - 0.72) / 0.12));
+  return c;
+}
+
+function slopeGrid(s) {
+  const { z, w, h, cell } = s, out = new Float32Array(w * h);
+  const at = (x, y) => z[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const gx = (at(x + 1, y) - at(x - 1, y)) / (2 * cell), gy = (at(x, y + 1) - at(x, y - 1)) / (2 * cell);
+    out[y * w + x] = Math.atan(Math.hypot(gx, gy)) * 180 / Math.PI;
+  }
+  return out;
+}
+
+/* Plan view: hillshade lit from the north-west, multiplied into the colour. */
+function drawPlan(canvas, s, mode, exag, mark) {
+  const { z, w, h, cell } = s, slope = slopeGrid(s), clay = hex(css().getPropertyValue('--clay'));
+  const img = new ImageData(w, h), L = [-0.5, -0.6, 0.62];
+  const at = (x, y) => z[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const dx = (at(x + 1, y) - at(x - 1, y)) * exag / (2 * cell), dy = (at(x, y + 1) - at(x, y - 1)) * exag / (2 * cell);
+    const n = 1 / Math.hypot(dx, dy, 1), shade = Math.max(0, (-dx * L[0] - dy * L[1] + L[2]) * n) * 0.85 + 0.25;
+    const c = colourAt(s, i, slope[i], mode, clay);
+    img.data.set([c[0] * shade * 255, c[1] * shade * 255, c[2] * shade * 255, 255], i * 4);
+  }
+  const off = new OffscreenCanvas(w, h);
+  off.getContext('2d').putImageData(img, 0, 0);
+  const ctx = canvas.getContext('2d');
+  canvas.width = Math.round(canvas.clientWidth * devicePixelRatio) || w * 3;
+  canvas.height = Math.round(canvas.width * h / w);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+  if (mark) {
+    const k = canvas.width / w, r = 7 * devicePixelRatio;
+    ctx.fillStyle = css().getPropertyValue('--marker');
+    ctx.beginPath();
+    ctx.moveTo((mark.x + 0.5) * k, (mark.y + 0.5) * k - r);
+    ctx.lineTo((mark.x + 0.5) * k + r * 0.9, (mark.y + 0.5) * k + r * 0.6);
+    ctx.lineTo((mark.x + 0.5) * k - r * 0.9, (mark.y + 0.5) * k + r * 0.6);
+    ctx.fill();
+  }
+  // Scale bar: the largest round distance that fits in a quarter of the width.
+  const extent = w * cell, pxPerM = canvas.width / extent, steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000];
+  const len = steps.filter((m) => m * pxPerM <= canvas.width * 0.28).pop() ?? 100;
+  const x0 = 12 * devicePixelRatio, y0 = canvas.height - 14 * devicePixelRatio;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(x0 - 4, y0 - 16 * devicePixelRatio, len * pxPerM + 8, 22 * devicePixelRatio);
+  ctx.fillStyle = '#16212b';
+  ctx.fillRect(x0, y0, len * pxPerM, 3 * devicePixelRatio);
+  ctx.font = `${11 * devicePixelRatio}px "IBM Plex Mono", monospace`;
+  ctx.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, x0, y0 - 4 * devicePixelRatio);
+}
+
+/* Side elevation: the map sliced into rows from the back to the front, each drawn as a filled ridge line over the
+   ones behind it, paler with distance, as a landscape reads through haze. True scale times the height factor. */
+function drawSide(canvas, s, exag) {
+  const { z, w, h, cell, lo, hi } = s, st = css();
+  const dpr = devicePixelRatio, W = Math.round(canvas.clientWidth * dpr) || 900;
+  const fitW = W / (w * cell), H = Math.round(Math.min(W * 0.55, Math.max(W * 0.28, (hi - lo) * exag * fitW * 1.12)));
+  canvas.width = W; canvas.height = H;
+  const k = Math.min(fitW, (H * 0.88) / ((hi - lo) * exag));
+  const ctx = canvas.getContext('2d'), sky = hex(st.getPropertyValue('--sky')), ink = hex(st.getPropertyValue('--ink'));
+  const land = mix(hex(st.getPropertyValue('--clay')), ink, 0.35);
+  ctx.fillStyle = st.getPropertyValue('--sky');
+  ctx.fillRect(0, 0, W, H);
+  const x0 = (W - w * cell * k) / 2, layers = Math.min(28, h), rows = Array.from({ length: layers }, (_, i) => Math.round(i * (h - 1) / (layers - 1)));
+  rows.forEach((r, li) => {
+    const depth = li / (layers - 1), c = mix(sky, land, 0.18 + 0.82 * depth ** 1.4).map((v) => Math.round(v * 255));
+    ctx.fillStyle = `rgb(${c})`;
+    ctx.beginPath();
+    ctx.moveTo(x0, H);
+    for (let x = 0; x < w; x++) ctx.lineTo(x0 + (x + 0.5) * cell * k, H - (z[r * w + x] - lo) * exag * k - 2);
+    ctx.lineTo(x0 + w * cell * k, H);
+    ctx.fill();
+  });
+}
+
+/* 3D model */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+stage.prepend(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 16 / 10, 1, 200000);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6257, 0.62));
+const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+scene.add(sun);
+let mesh = null, view = { az: 0, el: 0.5, dist: 1, target: new THREE.Vector3(), subject: null }, needsDraw = true;
+
+function buildMesh(s, mode, exag) {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const { z, w, h, cell, lo, hi } = s, ex = w * cell, ey = h * cell;
+  const geo = new THREE.PlaneGeometry(ex, ey, w - 1, h - 1);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, colours = new Float32Array(w * h * 3), slope = slopeGrid(s), clay = hex(css().getPropertyValue('--clay'));
+  for (let i = 0; i < w * h; i++) {
+    pos.setY(i, (z[i] - lo) * exag);
+    colours.set(colourAt(s, i, slope[i], mode, clay), i * 3);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  geo.computeVertexNormals();
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+  scene.add(mesh);
+  const size = Math.max(ex, ey, (hi - lo) * exag);
+  view.target.set(0, (hi - lo) * exag * 0.3, 0);
+  // Keep the viewer's zoom while they adjust the same mountain; frame a new one afresh.
+  if (view.subject !== s) { view.subject = s; view.dist = size * 1.55; }
+  sun.position.set(-size, size * 1.2, -size * 0.6);
+  needsDraw = true;
+}
+
+function placeCamera() {
+  const { az, el, dist, target } = view;
+  camera.position.set(target.x + dist * Math.sin(az) * Math.cos(el), target.y + dist * Math.sin(el), target.z + dist * Math.cos(az) * Math.cos(el));
+  camera.lookAt(target);
+  camera.near = dist / 200; camera.far = dist * 20; camera.updateProjectionMatrix();
+}
+
+function sizeStage() {
+  const r = stage.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / Math.max(1, r.height);
+  camera.updateProjectionMatrix();
+  needsDraw = true;
+}
+new ResizeObserver(sizeStage).observe(stage);
+(function loop() {
+  if (needsDraw && mesh) { placeCamera(); scene.background = new THREE.Color(css().getPropertyValue('--sky').trim()); renderer.render(scene, camera); needsDraw = false; }
+  requestAnimationFrame(loop);
+})();
+
+// Turning and zooming, by mouse, touch, or pen.
+const pointers = new Map();
+let pinch = 0;
+stage.addEventListener('pointerdown', (e) => { stage.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); });
+stage.addEventListener('pointerup', (e) => { pointers.delete(e.pointerId); pinch = 0; });
+stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); pinch = 0; });
+stage.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  const [px, py] = pointers.get(e.pointerId);
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 1) {
+    view.az -= (e.clientX - px) * 0.008;
+    view.el = Math.min(1.45, Math.max(0.08, view.el + (e.clientY - py) * 0.006));
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (pinch) view.dist *= pinch / d;
+    pinch = d;
+  }
+  needsDraw = true;
+});
+stage.addEventListener('wheel', (e) => { e.preventDefault(); view.dist *= Math.exp(e.deltaY * 0.0012); needsDraw = true; }, { passive: false });
+
+/* Items and selection */
+const items = [];
+for (const r of DATA.ranges) items.push({
+  id: `range-${r.key.replace(/_/g, '-')}`, group: 'Generated ranges', kind: 'range', title: r.name, data: r,
+  shapes: r.mountains.map((m) => surface(decode(m.b64, m.n * m.n, m.min), m.n, m.n, m.cell)),
+  real: r.real.map((f) => surface(decode(f.b64, f.w * f.h, f.min), f.w, f.h, f.cell)),
+});
+for (const p of DATA.peaks) items.push({
+  id: p.id, group: 'Famous peaks', kind: 'peak', title: p.name.replace(/ \(.*\)$/, ''), data: p,
+  shapes: [surface(decode(p.b64, p.n * p.n, p.min), p.n, p.n, p.cell)], real: [],
+});
+
+const nav = document.getElementById('index');
+const byRange = Object.fromEntries(DATA.ranges.map((r) => [r.key, r.name]));
+function buildIndex() {
+  const ranges = document.createElement('div');
+  ranges.className = 'group';
+  ranges.innerHTML = '<div class="label">Generated ranges</div>';
+  const peaks = document.createElement('div');
+  peaks.className = 'group';
+  peaks.innerHTML = '<div class="label">Famous peaks, by views</div>';
+  let lastRange = null;
+  for (const it of items) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'item'; b.dataset.id = it.id;
+    const right = it.kind === 'peak' ? `${fmt(it.data.views / 1000)}k` : `${fmt(it.data.params.relief)} m`;
+    b.innerHTML = `<span></span><span class="num">${right}</span>`;
+    b.firstChild.textContent = it.title;
+    b.addEventListener('click', () => { location.hash = it.id; });
+    if (it.kind === 'range') ranges.append(b);
+    else {
+      if (it.data.range !== lastRange) { const s = document.createElement('div'); s.className = 'sub'; s.textContent = byRange[it.data.range]; peaks.append(s); lastRange = it.data.range; }
+      peaks.append(b);
+    }
+  }
+  nav.append(ranges, peaks);
+}
+
+let current = null, shapeIndex = 0, mode = 'clay', exag = 1;
+const $ = (id) => document.getElementById(id);
+
+function fact(label, value) { return `<div class="fact"><span class="label">${label}</span><span class="v">${value}</span></div>`; }
+
+function render() {
+  const it = current, s = it.shapes[shapeIndex], d = it.data;
+  $('name').textContent = it.title;
+  const extent = s.w * s.cell;
+  if (it.kind === 'range') {
+    $('kind').textContent = `Generated · ${d.name} character · seed ${d.mountains[shapeIndex].seed}`;
+    $('facts').innerHTML = [
+      fact('Face relief', `${fmt(s.hi - s.lo)} m`), fact('Map', `${fmt(extent / 1000, 1)} × ${fmt(extent / 1000, 1)} km`),
+      fact('Grid', `${s.w} × ${s.h} · ${s.cell} m`), fact('Fit error', d.fitLoss == null ? '–' : fmt(d.fitLoss, 3)),
+    ].join('');
+    $('planCap').textContent = 'Summit near the top, base along the bottom: the game map. Lit from the north-west.';
+  } else {
+    const dir = COMPASS[Math.round(((d.bearingDeg + 180) % 360) / 22.5) % 16], up = COMPASS[Math.round(d.bearingDeg / 22.5) % 16];
+    $('kind').textContent = `Real terrain · ${byRange[d.range]} · ${fmt(Math.abs(d.lat), 3)}°${d.lat >= 0 ? 'N' : 'S'} ${fmt(Math.abs(d.lon), 3)}°${d.lon >= 0 ? 'E' : 'W'}`;
+    $('facts').innerHTML = [
+      fact('Summit', `${fmt(d.summitM)} m`), fact('Relief in map', `${fmt(s.hi - s.lo)} m`),
+      fact('Map', `${fmt(extent / 1000, 1)} × ${fmt(extent / 1000, 1)} km`), fact('Grid', `${s.w} × ${s.h} · ${fmt(s.cell, 1)} m`),
+      fact('Wikipedia views', `${fmt(d.views)}`), fact('Face looks', `${dir}`),
+    ].join('');
+    $('planCap').textContent = `${up} is up the map, so the face you see from the base looks ${dir}. The orange mark is the summit.`;
+  }
+  $('sideCap').textContent = exag === 1 ? 'True scale: heights and widths share one scale.' : `Heights stretched ${fmt(exag, 1)}× against widths.`;
+  $('seedSeg').hidden = it.shapes.length < 2;
+  $('seedSeg').innerHTML = it.shapes.map((_, i) => `<button type="button" data-i="${i}" aria-pressed="${i === shapeIndex}">Mountain ${i + 1}</button>`).join('');
+  $('realPlate').hidden = !it.real.length;
+  $('knobPlate').hidden = it.kind !== 'range';
+  if (it.kind === 'range') {
+    $('knobs').innerHTML = Object.entries(KNOBS).map(([k, m]) => {
+      const v = d.params[k], pct = Math.round(100 * (v - m.lo) / (m.hi - m.lo));
+      return `<div class="knob"><span>${m.label}</span><span class="v">${fmt(v, v >= 100 ? 0 : 2)}${m.unit ?? ''}</span><span class="bar"><i style="width:${Math.max(2, pct)}%"></i></span><span class="why">${m.why}</span></div>`;
+    }).join('');
+  }
+  $('real').innerHTML = '';
+  it.real.forEach((f, i) => {
+    const fig = document.createElement('figure'), c = document.createElement('canvas');
+    fig.append(c);
+    const cap = document.createElement('figcaption');
+    cap.textContent = `real face ${i + 1} · ${fmt(f.hi - f.lo)} m relief`;
+    fig.append(cap);
+    $('real').append(fig);
+    requestAnimationFrame(() => drawPlan(c, f, mode, exag, null));
+  });
+  document.querySelectorAll('.item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.id === it.id)));
+  $('tintNote').hidden = mode !== 'tint';
+  drawAll();
+}
+
+function drawAll() {
+  const s = current.shapes[shapeIndex];
+  buildMesh(s, mode, exag);
+  const mark = current.kind === 'peak' ? { x: 80, y: Math.round(0.22 * s.h) } : null;
+  drawPlan($('plan'), s, mode, exag, mark);
+  drawSide($('side'), s, exag);
+}
+
+function select(id) {
+  const it = items.find((x) => x.id === id) ?? items[0];
+  if (it !== current) { current = it; shapeIndex = 0; view.az = 0; view.el = 0.5; }
+  render();
+}
+
+$('seedSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { shapeIndex = Number(b.dataset.i); render(); } });
+for (const [id, m] of [['modeClay', 'clay'], ['modeTint', 'tint']]) $(id).addEventListener('click', () => {
+  mode = m;
+  $('modeClay').setAttribute('aria-pressed', String(m === 'clay'));
+  $('modeTint').setAttribute('aria-pressed', String(m === 'tint'));
+  render();
+});
+$('exag').addEventListener('input', (e) => { exag = Number(e.target.value); $('exagOut').textContent = fmt(exag, 1); render(); });
+addEventListener('hashchange', () => select(location.hash.slice(1)));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => current && render());
+new MutationObserver(() => current && render()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => current && render(), 150); });
+
+buildIndex();
+select(location.hash.slice(1) || 'range-alps');
+</script>
